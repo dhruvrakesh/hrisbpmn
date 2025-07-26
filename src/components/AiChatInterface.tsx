@@ -201,75 +201,71 @@ const AiChatInterface = ({ bpmnFileId, bpmnContext, analysisResult }: AiChatInte
       </CardHeader>
 
       <CardContent className="flex-1 flex flex-col p-0 min-h-0">
-        <div className="flex-1 relative">
-          <ScrollArea className="absolute inset-0">
-            <div className="p-4 space-y-4">
-              {messages.length === 0 && (
-                <div className="text-center text-muted-foreground py-8">
-                  <Bot className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">
-                    Ask me anything about this HRIS process!
-                  </p>
-                </div>
-              )}
-              
-              {messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex gap-3 ${
-                    message.role === 'user' ? 'flex-row-reverse' : ''
-                  }`}
-                >
-                  <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-                    message.role === 'user' 
-                      ? 'bg-primary text-primary-foreground' 
-                      : 'bg-muted'
-                  }`}>
-                    {message.role === 'user' ? (
-                      <User className="h-4 w-4" />
-                    ) : (
-                      <Bot className="h-4 w-4" />
-                    )}
-                  </div>
-                  
-                  <div className={`flex-1 min-w-0 ${
-                    message.role === 'user' ? 'text-right' : ''
-                  }`}>
-                    <div className={`inline-block max-w-full rounded-lg p-3 text-sm break-words ${
-                      message.role === 'user'
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted'
-                    }`}>
-                      <div className="whitespace-pre-wrap break-words leading-relaxed">
-                        {message.content}
-                      </div>
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-1 px-1">
-                      {new Date(message.timestamp).toLocaleTimeString()}
-                    </div>
-                  </div>
-                </div>
-              ))}
-              
-              {loading && (
-                <div className="flex gap-3">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-                    <Bot className="h-4 w-4" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="inline-block bg-muted rounded-lg p-3 text-sm">
-                      <div className="flex items-center gap-2">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        <span>Thinking...</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-              
-              <div ref={messagesEndRef} className="h-1" />
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {messages.length === 0 && (
+            <div className="text-center text-muted-foreground py-8">
+              <Bot className="h-8 w-8 mx-auto mb-2 opacity-50" />
+              <p className="text-sm">
+                Ask me anything about this HRIS process!
+              </p>
             </div>
-          </ScrollArea>
+          )}
+          
+          {messages.map((message) => (
+            <div
+              key={message.id}
+              className={`flex gap-3 ${
+                message.role === 'user' ? 'flex-row-reverse' : ''
+              }`}
+            >
+              <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
+                message.role === 'user' 
+                  ? 'bg-primary text-primary-foreground' 
+                  : 'bg-muted'
+              }`}>
+                {message.role === 'user' ? (
+                  <User className="h-4 w-4" />
+                ) : (
+                  <Bot className="h-4 w-4" />
+                )}
+              </div>
+              
+              <div className={`flex-1 min-w-0 ${
+                message.role === 'user' ? 'text-right' : ''
+              }`}>
+                <div className={`inline-block max-w-full rounded-lg p-3 text-sm break-words ${
+                  message.role === 'user'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted'
+                }`}>
+                  <div className="whitespace-pre-wrap break-words leading-relaxed">
+                    {message.content}
+                  </div>
+                </div>
+                <div className="text-xs text-muted-foreground mt-1 px-1">
+                  {new Date(message.timestamp).toLocaleTimeString()}
+                </div>
+              </div>
+            </div>
+          ))}
+          
+          {loading && (
+            <div className="flex gap-3">
+              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                <Bot className="h-4 w-4" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="inline-block bg-muted rounded-lg p-3 text-sm">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Thinking...</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          <div ref={messagesEndRef} className="h-1" />
         </div>
 
         <div className="p-4 border-t flex-shrink-0 bg-background">
