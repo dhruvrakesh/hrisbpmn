@@ -6,6 +6,8 @@ import Header from '@/components/layout/Header';
 import FileUpload from '@/components/FileUpload';
 import BpmnViewer from '@/components/BpmnViewer';
 import AnalysisResults from '@/components/AnalysisResults';
+import AiChatInterface from '@/components/AiChatInterface';
+import UsageTracker from '@/components/UsageTracker';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 
@@ -133,6 +135,21 @@ const Index = () => {
           />
         </div>
       </main>
+
+      {/* AI Chat Interface - appears when BPMN is loaded */}
+      {uploadedFile && (
+        <AiChatInterface
+          bpmnFileId={uploadedFile.id}
+          bpmnContext={{
+            fileName: uploadedFile.fileName,
+            filePath: uploadedFile.filePath
+          }}
+          analysisResult={analysisResult}
+        />
+      )}
+
+      {/* Usage Tracker */}
+      <UsageTracker />
     </div>
   );
 };
