@@ -3,13 +3,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import { useExport } from '@/hooks/useExport';
+import { useToast } from '@/hooks/use-toast';
 import { 
   AlertCircle, 
   AlertTriangle, 
   Info, 
   CheckCircle2, 
   Clock,
-  RefreshCw
+  RefreshCw,
+  Download,
+  FileText,
+  FileSpreadsheet
 } from 'lucide-react';
 
 interface Finding {
@@ -53,6 +58,8 @@ interface AnalysisResultsProps {
 
 const AnalysisResults = ({ result, loading, onRefresh }: AnalysisResultsProps) => {
   const [selectedFinding, setSelectedFinding] = useState<Finding | null>(null);
+  const { exportAnalysisToPDF, exportAnalysisToExcel } = useExport();
+  const { toast } = useToast();
 
   const getSeverityIcon = (severity: string) => {
     switch (severity) {
@@ -77,6 +84,82 @@ const AnalysisResults = ({ result, loading, onRefresh }: AnalysisResultsProps) =
         return 'outline';
       default:
         return 'default';
+    }
+  };
+
+  const handleExportPDF = async () => {
+    if (!result) return;
+    try {
+      // Transform data to match export interface
+      const exportData = {
+        fileName: result.fileName,
+        timestamp: result.analyzedAt,
+        summary: {
+          userTasks: result.summary.totalUserTasks,
+          integrations: result.summary.totalServiceTasks,
+          complexity: result.summary.riskLevel,
+          issueCount: result.findings.length,
+        },
+        processIntelligence: result.processIntelligence,
+        findings: result.findings.map(f => ({
+          id: f.id,
+          ruleName: f.ruleName,
+          severity: f.severity.toLowerCase() as 'error' | 'warning' | 'info',
+          message: f.message,
+          elementId: f.elementId,
+          elementName: f.elementName,
+          description: f.description,
+        })),
+      };
+      await exportAnalysisToPDF(exportData);
+      toast({
+        title: "Success",
+        description: "Analysis exported to PDF successfully",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to export analysis to PDF",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleExportExcel = () => {
+    if (!result) return;
+    try {
+      // Transform data to match export interface
+      const exportData = {
+        fileName: result.fileName,
+        timestamp: result.analyzedAt,
+        summary: {
+          userTasks: result.summary.totalUserTasks,
+          integrations: result.summary.totalServiceTasks,
+          complexity: result.summary.riskLevel,
+          issueCount: result.findings.length,
+        },
+        processIntelligence: result.processIntelligence,
+        findings: result.findings.map(f => ({
+          id: f.id,
+          ruleName: f.ruleName,
+          severity: f.severity.toLowerCase() as 'error' | 'warning' | 'info',
+          message: f.message,
+          elementId: f.elementId,
+          elementName: f.elementName,
+          description: f.description,
+        })),
+      };
+      exportAnalysisToExcel(exportData);
+      toast({
+        title: "Success",
+        description: "Analysis exported to Excel successfully",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to export analysis to Excel",
+        variant: "destructive",
+      });
     }
   };
 
@@ -138,12 +221,22 @@ const AnalysisResults = ({ result, loading, onRefresh }: AnalysisResultsProps) =
               {result.fileName} • Analyzed {new Date(result.analyzedAt).toLocaleString()}
             </CardDescription>
           </div>
-          {onRefresh && (
-            <Button variant="outline" size="sm" onClick={onRefresh}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Re-analyze
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={handleExportPDF}>
+              <FileText className="h-4 w-4 mr-2" />
+              Export PDF
             </Button>
-          )}
+            <Button variant="outline" size="sm" onClick={handleExportExcel}>
+              <FileSpreadsheet className="h-4 w-4 mr-2" />
+              Export Excel
+            </Button>
+            {onRefresh && (
+              <Button variant="outline" size="sm" onClick={onRefresh}>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Re-analyze
+              </Button>
+            )}
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-6">

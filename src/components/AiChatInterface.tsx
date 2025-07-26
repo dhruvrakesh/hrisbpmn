@@ -6,7 +6,8 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { MessageSquare, Send, Bot, User, Loader2 } from 'lucide-react';
+import { useExport } from '@/hooks/useExport';
+import { MessageSquare, Send, Bot, User, Loader2, Download } from 'lucide-react';
 
 interface Message {
   id: string;
@@ -28,6 +29,7 @@ const AiChatInterface = ({ bpmnFileId, bpmnContext, analysisResult }: AiChatInte
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const { toast } = useToast();
+  const { exportChatToPDF } = useExport();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -146,6 +148,38 @@ const AiChatInterface = ({ bpmnFileId, bpmnContext, analysisResult }: AiChatInte
     });
   };
 
+  const handleExportChat = async () => {
+    if (!bpmnContext || messages.length === 0) {
+      toast({
+        title: "Nothing to export",
+        description: "No chat messages to export yet",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const exportMessages = messages
+        .filter(msg => msg.role !== 'system')
+        .map(msg => ({
+          role: msg.role as 'user' | 'assistant',
+          content: msg.content,
+          created_at: msg.timestamp,
+        }));
+      await exportChatToPDF(exportMessages, bpmnContext.fileName);
+      toast({
+        title: "Success",
+        description: "Chat conversation exported successfully",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to export chat conversation",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (!isOpen) {
     return (
       <Card className="fixed bottom-4 right-4 w-80">
@@ -176,6 +210,17 @@ const AiChatInterface = ({ bpmnFileId, bpmnContext, analysisResult }: AiChatInte
             </CardDescription>
           </div>
           <div className="flex gap-2">
+            {messages.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleExportChat}
+                disabled={loading}
+              >
+                <Download className="h-3 w-3 mr-1" />
+                Export
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="sm"

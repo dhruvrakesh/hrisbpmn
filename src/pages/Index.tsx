@@ -8,8 +8,11 @@ import BpmnViewer from '@/components/BpmnViewer';
 import AnalysisResults from '@/components/AnalysisResults';
 import AiChatInterface from '@/components/AiChatInterface';
 import UsageTracker from '@/components/UsageTracker';
+import { ProcessHistory } from '@/components/ProcessHistory';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 interface FileData {
   id: string;
@@ -54,6 +57,7 @@ const Index = () => {
   const [uploadedFile, setUploadedFile] = useState<FileData | null>(null);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
+  const [activeTab, setActiveTab] = useState("upload");
 
   // Redirect to auth if not authenticated
   if (!authLoading && !user) {
@@ -92,6 +96,7 @@ const Index = () => {
       }
 
       setAnalysisResult(data);
+      setActiveTab("results");
       toast({
         title: "Analysis Complete",
         description: `Found ${data.findings?.length || 0} findings. Process complexity: ${data.summary?.riskLevel || 'Unknown'}.`,
@@ -109,59 +114,99 @@ const Index = () => {
     }
   };
 
+  const handleFileSelect = (file: any) => {
+    setUploadedFile({
+      id: file.id,
+      fileName: file.file_name,
+      filePath: file.file_path,
+    });
+    setActiveTab("upload");
+    setAnalysisResult(null);
+    toast({
+      title: "File Selected",
+      description: `Loaded ${file.file_name} from your process history`,
+    });
+  };
+
   return (
-    <div className="min-h-screen bg-background">
-      <Header />
-      
-      <main className="container mx-auto py-8 space-y-8">
-        <div className="text-center space-y-4">
-          <h1 className="text-4xl font-bold">HRIS Process Linter</h1>
-          <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            Upload your BPMN process maps and get instant feedback on HRIS best practices, 
-            compliance requirements, and process optimization opportunities.
-          </p>
-        </div>
+    <ErrorBoundary>
+      <div className="min-h-screen bg-background">
+        <Header />
+        
+        <main className="container mx-auto py-8 space-y-8">
+          <div className="text-center space-y-4">
+            <h1 className="text-4xl font-bold">HRIS Process Linter</h1>
+            <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+              Upload your BPMN process maps and get instant feedback on HRIS best practices, 
+              compliance requirements, and process optimization opportunities.
+            </p>
+          </div>
 
-        <div className="grid gap-8">
-          {/* File Upload */}
-          {!uploadedFile && (
-            <FileUpload onFileUploaded={handleFileUploaded} />
-          )}
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="upload">Upload & Analyze</TabsTrigger>
+              <TabsTrigger value="results">Results</TabsTrigger>
+              <TabsTrigger value="history">Process History</TabsTrigger>
+            </TabsList>
 
-          {/* BPMN Viewer */}
-          {uploadedFile && (
-            <BpmnViewer
-              fileId={uploadedFile.id}
-              fileName={uploadedFile.fileName}
-              filePath={uploadedFile.filePath}
-              onAnalyze={runAnalysis}
-            />
-          )}
+            <TabsContent value="upload" className="space-y-6">
+              <div className="grid gap-8">
+                {/* File Upload */}
+                {!uploadedFile && (
+                  <FileUpload onFileUploaded={handleFileUploaded} />
+                )}
 
-          {/* Analysis Results */}
-          <AnalysisResults
-            result={analysisResult}
-            loading={analyzing}
-            onRefresh={runAnalysis}
+                {/* BPMN Viewer */}
+                {uploadedFile && (
+                  <BpmnViewer
+                    fileId={uploadedFile.id}
+                    fileName={uploadedFile.fileName}
+                    filePath={uploadedFile.filePath}
+                    onAnalyze={runAnalysis}
+                  />
+                )}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="results" className="space-y-6">
+              {analysisResult ? (
+                <AnalysisResults
+                  result={analysisResult}
+                  loading={analyzing}
+                  onRefresh={runAnalysis}
+                />
+              ) : (
+                <div className="text-center py-12">
+                  <p className="text-muted-foreground">No analysis results yet. Upload and analyze a BPMN file first.</p>
+                </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="history" className="space-y-6">
+              <ProcessHistory 
+                onFileSelect={handleFileSelect}
+                currentFileId={uploadedFile?.id}
+              />
+            </TabsContent>
+          </Tabs>
+        </main>
+
+        {/* AI Chat Interface - appears when BPMN is loaded */}
+        {uploadedFile && (
+          <AiChatInterface
+            bpmnFileId={uploadedFile.id}
+            bpmnContext={{
+              fileName: uploadedFile.fileName,
+              filePath: uploadedFile.filePath
+            }}
+            analysisResult={analysisResult}
           />
-        </div>
-      </main>
+        )}
 
-      {/* AI Chat Interface - appears when BPMN is loaded */}
-      {uploadedFile && (
-        <AiChatInterface
-          bpmnFileId={uploadedFile.id}
-          bpmnContext={{
-            fileName: uploadedFile.fileName,
-            filePath: uploadedFile.filePath
-          }}
-          analysisResult={analysisResult}
-        />
-      )}
-
-      {/* Usage Tracker */}
-      <UsageTracker />
-    </div>
+        {/* Usage Tracker */}
+        <UsageTracker />
+      </div>
+    </ErrorBoundary>
   );
 };
 
