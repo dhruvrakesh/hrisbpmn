@@ -29,7 +29,18 @@ interface AnalysisResult {
   analyzedAt: string;
   summary: {
     totalUserTasks: number;
+    totalServiceTasks?: number;
+    totalGateways?: number;
+    totalEvents?: number;
+    complexityScore?: number;
+    riskLevel?: string;
     tasksFound: Array<{ id: string; name: string }>;
+  };
+  processIntelligence?: {
+    complexity: any;
+    roleDistribution: any;
+    aiInsights: any;
+    stakeholderViews: any;
   };
   findings: Finding[];
 }
@@ -136,12 +147,24 @@ const AnalysisResults = ({ result, loading, onRefresh }: AnalysisResultsProps) =
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Summary */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {/* Enhanced Summary */}
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
           <div className="text-center p-4 bg-muted/50 rounded-lg">
             <div className="text-2xl font-bold">{result.summary.totalUserTasks}</div>
             <div className="text-sm text-muted-foreground">User Tasks</div>
           </div>
+          {result.summary.totalServiceTasks !== undefined && (
+            <div className="text-center p-4 bg-green-50 dark:bg-green-950/20 rounded-lg">
+              <div className="text-2xl font-bold text-green-600">{result.summary.totalServiceTasks}</div>
+              <div className="text-sm text-muted-foreground">Integrations</div>
+            </div>
+          )}
+          {result.summary.complexityScore !== undefined && (
+            <div className="text-center p-4 bg-purple-50 dark:bg-purple-950/20 rounded-lg">
+              <div className="text-2xl font-bold text-purple-600">{result.summary.complexityScore}</div>
+              <div className="text-sm text-muted-foreground">Complexity</div>
+            </div>
+          )}
           <div className="text-center p-4 bg-red-50 dark:bg-red-950/20 rounded-lg">
             <div className="text-2xl font-bold text-destructive">{errorCount}</div>
             <div className="text-sm text-muted-foreground">Errors</div>
@@ -155,6 +178,56 @@ const AnalysisResults = ({ result, loading, onRefresh }: AnalysisResultsProps) =
             <div className="text-sm text-muted-foreground">Info</div>
           </div>
         </div>
+
+        {/* AI Insights Panel */}
+        {result.processIntelligence?.aiInsights && (
+          <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/20 dark:to-purple-950/20 p-6 rounded-lg border">
+            <h3 className="text-lg font-semibold mb-4 flex items-center">
+              <div className="w-2 h-2 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full mr-3"></div>
+              AI Process Intelligence
+            </h3>
+            <div className="grid md:grid-cols-2 gap-6">
+              <div>
+                <h4 className="font-medium text-sm text-muted-foreground mb-2">KEY INSIGHTS</h4>
+                <ul className="space-y-2">
+                  {result.processIntelligence.aiInsights.insights?.slice(0, 3).map((insight: string, index: number) => (
+                    <li key={index} className="text-sm flex items-start">
+                      <div className="w-1.5 h-1.5 bg-blue-500 rounded-full mt-2 mr-2 flex-shrink-0"></div>
+                      {insight}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <h4 className="font-medium text-sm text-muted-foreground mb-2">RECOMMENDATIONS</h4>
+                <ul className="space-y-2">
+                  {result.processIntelligence.aiInsights.recommendations?.slice(0, 3).map((rec: string, index: number) => (
+                    <li key={index} className="text-sm flex items-start">
+                      <div className="w-1.5 h-1.5 bg-purple-500 rounded-full mt-2 mr-2 flex-shrink-0"></div>
+                      {rec}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+            {result.processIntelligence.aiInsights.implementationReadiness && (
+              <div className="mt-4 pt-4 border-t border-white/20">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Implementation Readiness</span>
+                  <div className="flex items-center">
+                    <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full mr-2">
+                      <div 
+                        className="h-2 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full"
+                        style={{ width: `${result.processIntelligence.aiInsights.implementationReadiness * 10}%` }}
+                      ></div>
+                    </div>
+                    <span className="text-sm font-bold">{result.processIntelligence.aiInsights.implementationReadiness}/10</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         <Separator />
 
