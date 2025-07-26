@@ -77,7 +77,7 @@ export const useExport = () => {
         pdf.text('AI Process Intelligence', margin, yPosition);
         yPosition += 10;
 
-        if (result.processIntelligence.insights.length > 0) {
+        if (result.processIntelligence.insights && result.processIntelligence.insights.length > 0) {
           pdf.setFontSize(12);
           pdf.text('Insights:', margin, yPosition);
           yPosition += 8;
@@ -91,7 +91,7 @@ export const useExport = () => {
           yPosition += 5;
         }
 
-        if (result.processIntelligence.recommendations.length > 0) {
+        if (result.processIntelligence.recommendations && result.processIntelligence.recommendations.length > 0) {
           pdf.setFontSize(12);
           pdf.text('Recommendations:', margin, yPosition);
           yPosition += 8;
@@ -195,9 +195,9 @@ export const useExport = () => {
       if (result.processIntelligence) {
         const insightsData = [
           ['Type', 'Content'],
-          ...result.processIntelligence.insights.map(insight => ['Insight', insight]),
-          ...result.processIntelligence.recommendations.map(rec => ['Recommendation', rec]),
-          ['Risk Assessment', result.processIntelligence.riskAssessment]
+          ...(result.processIntelligence.insights || []).map(insight => ['Insight', insight]),
+          ...(result.processIntelligence.recommendations || []).map(rec => ['Recommendation', rec]),
+          ['Risk Assessment', result.processIntelligence.riskAssessment || '']
         ];
 
         const insightsSheet = XLSX.utils.aoa_to_sheet(insightsData);
