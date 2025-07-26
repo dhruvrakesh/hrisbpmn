@@ -23,7 +23,18 @@ interface AnalysisResult {
   analyzedAt: string;
   summary: {
     totalUserTasks: number;
-    tasksFound: Array<{ id: string; name: string }>;
+    totalServiceTasks: number;
+    totalGateways: number;
+    totalEvents: number;
+    processComplexity: number;
+    riskLevel: string;
+    tasksFound?: Array<{ id: string; name: string }>;
+  };
+  processIntelligence?: {
+    insights: string[];
+    recommendations: string[];
+    riskAssessment: string;
+    complianceNotes: string[];
   };
   findings: Array<{
     id: string;
@@ -83,7 +94,7 @@ const Index = () => {
       setAnalysisResult(data);
       toast({
         title: "Analysis Complete",
-        description: `Found ${data.findings.length} findings in your process.`,
+        description: `Found ${data.findings?.length || 0} findings. Process complexity: ${data.summary?.riskLevel || 'Unknown'}.`,
       });
 
     } catch (error: any) {
