@@ -172,7 +172,7 @@ const Index = () => {
       setUploadedFile({
         id: fileData.id,
         fileName: fileName,
-        filePath: fileName
+        filePath: filePath
       });
 
       setActiveTab("upload");
