@@ -53,20 +53,20 @@ async function performEnhancedBPMNAnalysis(bpmnXml: string, fileId: string, file
 // Enhanced BPMN element extraction with better pattern matching
 function extractBPMNElements(bpmnXml: string) {
   const elements = {
-    userTasks: extractElementsWithRegex(bpmnXml, /<bpmn:userTask[^>]*id="([^"]*)"[^>]*name="([^"]*)"[^>]*>/g),
-    serviceTasks: extractElementsWithRegex(bpmnXml, /<bpmn:serviceTask[^>]*id="([^"]*)"[^>]*name="([^"]*)"[^>]*>/g),
-    exclusiveGateways: extractElementsWithRegex(bpmnXml, /<bpmn:exclusiveGateway[^>]*id="([^"]*)"[^>]*>/g),
-    parallelGateways: extractElementsWithRegex(bpmnXml, /<bpmn:parallelGateway[^>]*id="([^"]*)"[^>]*>/g),
-    inclusiveGateways: extractElementsWithRegex(bpmnXml, /<bpmn:inclusiveGateway[^>]*id="([^"]*)"[^>]*>/g),
-    startEvents: extractElementsWithRegex(bpmnXml, /<bpmn:startEvent[^>]*id="([^"]*)"[^>]*>/g),
-    endEvents: extractElementsWithRegex(bpmnXml, /<bpmn:endEvent[^>]*id="([^"]*)"[^>]*>/g),
-    sequenceFlows: extractElementsWithRegex(bpmnXml, /<bpmn:sequenceFlow[^>]*id="([^"]*)"[^>]*>/g),
-    lanes: extractElementsWithRegex(bpmnXml, /<bpmn:lane[^>]*id="([^"]*)"[^>]*name="([^"]*)"[^>]*>/g),
-    pools: extractElementsWithRegex(bpmnXml, /<bpmn:pool[^>]*id="([^"]*)"[^>]*name="([^"]*)"[^>]*>/g),
+    userTasks: extractElementsWithRegex(bpmnXml, /<bpmn:userTask[^>]*id="([^"]*)"(?:[^>]*name="([^"]*)")?[^>]*>/g),
+    serviceTasks: extractElementsWithRegex(bpmnXml, /<bpmn:serviceTask[^>]*id="([^"]*)"(?:[^>]*name="([^"]*)")?[^>]*>/g),
+    exclusiveGateways: extractElementsWithRegex(bpmnXml, /<bpmn:exclusiveGateway[^>]*id="([^"]*)"(?:[^>]*name="([^"]*)")?[^>]*>/g),
+    parallelGateways: extractElementsWithRegex(bpmnXml, /<bpmn:parallelGateway[^>]*id="([^"]*)"(?:[^>]*name="([^"]*)")?[^>]*>/g),
+    inclusiveGateways: extractElementsWithRegex(bpmnXml, /<bpmn:inclusiveGateway[^>]*id="([^"]*)"(?:[^>]*name="([^"]*)")?[^>]*>/g),
+    startEvents: extractElementsWithRegex(bpmnXml, /<bpmn:startEvent[^>]*id="([^"]*)"(?:[^>]*name="([^"]*)")?[^>]*>/g),
+    endEvents: extractElementsWithRegex(bpmnXml, /<bpmn:endEvent[^>]*id="([^"]*)"(?:[^>]*name="([^"]*)")?[^>]*>/g),
+    sequenceFlows: extractElementsWithRegex(bpmnXml, /<bpmn:sequenceFlow[^>]*id="([^"]*)"(?:[^>]*name="([^"]*)")?[^>]*>/g),
+    lanes: extractElementsWithRegex(bpmnXml, /<bpmn:lane[^>]*id="([^"]*)"(?:[^>]*name="([^"]*)")?[^>]*>/g),
+    pools: extractElementsWithRegex(bpmnXml, /<bpmn:pool[^>]*id="([^"]*)"(?:[^>]*name="([^"]*)")?[^>]*>/g),
     allElements: []
   };
   
-  // Collect all element IDs for suggestion targeting
+  // Collect all valid element IDs for contextual suggestion targeting
   elements.allElements = [
     ...elements.userTasks.map(t => t.id),
     ...elements.serviceTasks.map(t => t.id),
@@ -75,7 +75,9 @@ function extractBPMNElements(bpmnXml: string) {
     ...elements.inclusiveGateways.map(g => g.id),
     ...elements.startEvents.map(e => e.id),
     ...elements.endEvents.map(e => e.id)
-  ].filter(id => id);
+  ].filter(id => id && id.trim() !== '');
+  
+  console.log(`Extracted ${elements.allElements.length} valid element IDs:`, elements.allElements.slice(0, 5));
   
   return elements;
 }
@@ -312,60 +314,120 @@ function parseAIResponse(aiResponse: string, elements: any) {
 }
 
 function generateFallbackSuggestions(elements: any) {
-  const targetElementId = elements.allElements.length > 0 ? elements.allElements[0] : null;
-  const gatewayElementId = elements.exclusiveGateways.length > 0 ? elements.exclusiveGateways[0].id : null;
-  const laneElementId = elements.lanes.length > 0 ? elements.lanes[0].id : null;
+  // Use actual element IDs from the BPMN for context-aware suggestions
+  const primaryTaskId = elements.userTasks.length > 0 ? elements.userTasks[0].id : 
+                       elements.serviceTasks.length > 0 ? elements.serviceTasks[0].id : null;
+  const primaryGatewayId = elements.exclusiveGateways.length > 0 ? elements.exclusiveGateways[0].id : 
+                          elements.parallelGateways.length > 0 ? elements.parallelGateways[0].id : null;
+  const primaryLaneId = elements.lanes.length > 0 ? elements.lanes[0].id : null;
   
-  return [
-    {
+  // Generate contextual suggestions based on actual diagram content
+  const suggestions = [];
+  
+  // Add validation task after the first user task if it exists
+  if (primaryTaskId) {
+    suggestions.push({
       id: 'suggestion_1',
       type: 'add-task',
-      elementId: targetElementId,
-      description: 'Add data validation task for compliance',
+      elementId: primaryTaskId,
+      description: `Add validation task after ${elements.userTasks[0]?.name || 'current task'}`,
       details: { 
-        implementation: 'Add a task to validate data before processing',
-        name: 'Data Validation Task'
+        implementation: 'Insert quality validation step in the workflow',
+        name: 'Quality Validation',
+        position: 'after'
       }
-    },
-    {
-      id: 'suggestion_2', 
-      type: 'add-gateway',
-      elementId: targetElementId,
-      description: 'Add decision gateway for conditional processing',
+    });
+  } else {
+    suggestions.push({
+      id: 'suggestion_1',
+      type: 'add-task',
+      elementId: null,
+      description: 'Add initial data validation task',
       details: { 
-        implementation: 'Add an exclusive gateway for branching logic',
-        gatewayType: 'exclusive',
-        name: 'Decision Point'
+        implementation: 'Add a task to validate inputs at process start',
+        name: 'Input Validation'
       }
-    },
-    {
-      id: 'suggestion_3',
-      type: 'optimize-flow',
-      elementId: targetElementId,
-      description: 'Streamline approval workflow',
-      details: { implementation: 'Optimize sequence flow connections' }
-    },
-    {
+    });
+  }
+  
+  // Add decision gateway at strategic location
+  const suggestionTarget = primaryTaskId || elements.allElements[0] || null;
+  suggestions.push({
+    id: 'suggestion_2', 
+    type: 'add-gateway',
+    elementId: suggestionTarget,
+    description: 'Add decision gateway for conditional routing',
+    details: { 
+      implementation: 'Insert decision point for process branching',
+      gatewayType: 'exclusive',
+      name: 'Approval Decision'
+    }
+  });
+  
+  // Optimize flow based on current structure
+  suggestions.push({
+    id: 'suggestion_3',
+    type: 'optimize-flow',
+    elementId: suggestionTarget,
+    description: 'Streamline process flow connections',
+    details: { 
+      implementation: 'Optimize sequence flows for better efficiency',
+      optimization: 'reduce_steps'
+    }
+  });
+  
+  // Add role/lane if not present or enhance existing
+  if (elements.lanes.length === 0) {
+    suggestions.push({
       id: 'suggestion_4',
       type: 'add-role',
-      elementId: laneElementId,
-      description: 'Add reviewer role for quality assurance',
+      elementId: null,
+      description: 'Add approver role for process oversight',
       details: { 
-        implementation: 'Add a dedicated lane for quality review',
+        implementation: 'Create dedicated lane for approval workflow',
+        roleName: 'Process Approver'
+      }
+    });
+  } else {
+    suggestions.push({
+      id: 'suggestion_4',
+      type: 'add-role',
+      elementId: primaryLaneId,
+      description: `Add reviewer role to support ${elements.lanes[0]?.name || 'current role'}`,
+      details: { 
+        implementation: 'Add complementary role for quality assurance',
         roleName: 'Quality Reviewer'
       }
-    },
-    {
+    });
+  }
+  
+  // Change gateway type if one exists, otherwise suggest adding one
+  if (primaryGatewayId) {
+    suggestions.push({
       id: 'suggestion_5',
       type: 'change-gateway',
-      elementId: gatewayElementId,
-      description: 'Convert to parallel gateway for concurrent processing',
+      elementId: primaryGatewayId,
+      description: `Optimize ${elements.exclusiveGateways[0]?.name || 'gateway'} for parallel processing`,
       details: { 
-        implementation: 'Change exclusive gateway to parallel for better efficiency',
+        implementation: 'Convert to parallel gateway for concurrent execution',
         gatewayType: 'bpmn:ParallelGateway'
       }
-    }
-  ];
+    });
+  } else {
+    suggestions.push({
+      id: 'suggestion_5',
+      type: 'add-gateway',
+      elementId: suggestionTarget,
+      description: 'Add parallel gateway for concurrent processing',
+      details: { 
+        implementation: 'Enable multiple process paths to execute simultaneously',
+        gatewayType: 'parallel',
+        name: 'Parallel Split'
+      }
+    });
+  }
+  
+  return suggestions;
 }
 
 function generateFallbackInsights(elements: any, complexity: any, roles: any) {

@@ -250,7 +250,7 @@ const Index = () => {
   const handleApplySuggestion = async (suggestion: any) => {
     if (!uploadedFile) {
       toast({
-        title: "Error",
+        title: "Error", 
         description: "No BPMN file is loaded. Please upload a file first.",
         variant: "destructive",
       });
@@ -258,17 +258,11 @@ const Index = () => {
     }
 
     try {
-      // Get the BpmnViewer component ref
-      if (!bpmnViewerRef?.applySuggestion) {
-        // Call applySuggestion directly through the component instance
-        // Find the BpmnViewer component and call its applySuggestion method
-        const event = new CustomEvent('applySuggestion', { detail: suggestion });
-        window.dispatchEvent(event);
-      } else {
-        await bpmnViewerRef.applySuggestion(suggestion);
-      }
+      // Dispatch custom event to BpmnViewer for cross-component communication
+      const event = new CustomEvent('applySuggestion', { detail: suggestion });
+      window.dispatchEvent(event);
 
-      // Remove the applied suggestion from analysis results
+      // Remove the applied suggestion from analysis results to prevent re-application
       if (analysisResult?.processIntelligence?.editingSuggestions) {
         const updatedSuggestions = analysisResult.processIntelligence.editingSuggestions.filter(
           (s: any) => s.id !== suggestion.id
@@ -282,12 +276,12 @@ const Index = () => {
         });
       }
 
-      // Switch to upload tab to show the changes
+      // Switch to upload tab to show the changes immediately
       setActiveTab("upload");
       
       toast({
-        title: "Suggestion Applied",
-        description: suggestion.description,
+        title: "Processing Suggestion",
+        description: "Applying changes to your diagram...",
       });
     } catch (error: any) {
       console.error('Error applying suggestion:', error);

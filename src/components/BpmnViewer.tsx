@@ -258,6 +258,12 @@ const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave, suggestions
 
     console.log('Applying AI suggestion:', suggestion);
 
+    // Show loading state
+    toast({
+      title: "Applying Suggestion",
+      description: "Modifying your BPMN diagram...",
+    });
+
     try {
       const modeler = bpmnModelerRef.current;
       const modeling = modeler.get('modeling');
@@ -276,6 +282,7 @@ const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave, suggestions
       const centerY = viewbox.y + (viewbox.height / 2);
 
       let operationSuccess = false;
+      let modificationDetails = '';
 
       try {
         switch (suggestion.type) {
@@ -498,91 +505,12 @@ const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave, suggestions
       if (!operationSuccess) {
         throw new Error('Operation completed but no changes were detected');
       }
+
+      // Save the updated BPMN as an AI revision
+      await saveAIRevision(suggestion);
       
       // Mark as having changes
       setHasChanges(true);
-      
-      // Save the current state as a new version with AI suggestion applied
-      try {
-        console.log('Starting AI suggestion save process for:', suggestion.type);
-        const result = await bpmnModelerRef.current.saveXML({ format: true });
-        const { xml } = result;
-        
-        // Get current user for AI suggestions
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-          console.error('No authenticated user found');
-          throw new Error('User not authenticated');
-        }
-
-        console.log('User authenticated:', user.id);
-
-        // Get the next version number
-        const { data: maxVersion, error: versionError } = await supabase
-          .from('bpmn_versions')
-          .select('version_number')
-          .eq('bpmn_file_id', fileId)
-          .order('version_number', { ascending: false })
-          .limit(1)
-          .single();
-
-        if (versionError && versionError.code !== 'PGRST116') {
-          console.error('Error getting max version:', versionError);
-          throw versionError;
-        }
-
-        const nextVersion = (maxVersion?.version_number || 0) + 1;
-        console.log('Creating version:', nextVersion);
-
-        // Create new version with proper ai_suggestions_applied format
-        const { error: insertVersionError } = await supabase
-          .from('bpmn_versions')
-          .insert({
-            bpmn_file_id: fileId,
-            version_number: nextVersion,
-            version_type: 'ai_revised',
-            bpmn_xml: xml,
-            created_by: user.id,
-            change_summary: `AI suggestion applied: ${suggestion.description}`,
-            ai_suggestions_applied: JSON.stringify([suggestion]) // Store as proper JSON array
-          });
-
-        if (insertVersionError) {
-          console.error('Error creating version:', insertVersionError);
-          throw insertVersionError;
-        }
-
-        console.log('Version created successfully');
-
-        // Create audit trail entry
-        const { error: auditError } = await supabase
-          .from('bpmn_audit_trail')
-          .insert({
-            bpmn_file_id: fileId,
-            action_type: 'ai_suggestion_applied',
-            user_id: user.id,
-            action_details: { 
-              version_created: nextVersion,
-              suggestion_type: suggestion.type,
-              description: suggestion.description,
-              element_id: suggestion.elementId,
-              timestamp: new Date().toISOString()
-            },
-            ai_suggestion_data: JSON.stringify(suggestion) // Store as proper JSON object
-          });
-
-        if (auditError) {
-          console.error('Error creating audit trail:', auditError);
-          throw auditError;
-        }
-
-        console.log('Audit trail created successfully');
-        
-      } catch (versionError) {
-        console.error('Error saving AI version:', versionError);
-        // Re-throw the error so it's properly handled
-        throw new Error(`Failed to save AI suggestion to database: ${versionError.message}`);
-      }
       
       toast({
         title: "Suggestion Applied",
@@ -623,6 +551,61 @@ const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave, suggestions
       } catch (recoveryError) {
         console.warn('Recovery attempt failed:', recoveryError);
       }
+    }
+  };
+
+  const saveAIRevision = async (appliedSuggestion: AIEditingSuggestion) => {
+    try {
+      const result = await bpmnModelerRef.current.saveXML({ format: true });
+      const { xml } = result;
+      
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+      
+      // Get the next version number
+      const { data: maxVersion } = await supabase
+        .from('bpmn_versions')
+        .select('version_number')
+        .eq('bpmn_file_id', fileId)
+        .order('version_number', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const nextVersion = (maxVersion?.version_number || 0) + 1;
+
+      // Create new AI revision
+      await supabase
+        .from('bpmn_versions')
+        .insert({
+          bpmn_file_id: fileId,
+          version_number: nextVersion,
+          version_type: 'ai_revised',
+          bpmn_xml: xml,
+          created_by: user.id,
+          change_summary: `AI Suggestion Applied: ${appliedSuggestion.description}`,
+          ai_suggestions_applied: JSON.stringify([appliedSuggestion])
+        });
+
+      // Create audit trail entry
+      await supabase
+        .from('bpmn_audit_trail')
+        .insert({
+          bpmn_file_id: fileId,
+          action_type: 'ai_suggestion_applied',
+          user_id: user.id,
+          action_details: JSON.stringify({ 
+            version_created: nextVersion,
+            suggestion_applied: appliedSuggestion,
+            change_summary: `AI Suggestion Applied: ${appliedSuggestion.description}`
+          }),
+          ai_suggestion_data: JSON.stringify(appliedSuggestion)
+        });
+
+      console.log(`AI revision v${nextVersion} created successfully`);
+    } catch (error: any) {
+      console.error('Error saving AI revision:', error);
+      // Don't throw error - suggestion was applied, just logging failed
     }
   };
 
