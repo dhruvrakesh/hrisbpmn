@@ -21,7 +21,7 @@ interface BpmnViewerProps {
 
 interface AIEditingSuggestion {
   id: string;
-  type: 'add-task' | 'change-gateway' | 'optimize-flow' | 'add-role';
+  type: 'add-task' | 'add-gateway' | 'change-gateway' | 'optimize-flow' | 'add-role';
   elementId?: string;
   description: string;
   details: any;
@@ -324,6 +324,55 @@ const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave, suggestions
             }
             break;
 
+          case 'add-gateway':
+            console.log('Creating new gateway element');
+            
+            const gatewayType = suggestion.details?.gatewayType || 'exclusive';
+            let bpmnType = 'bpmn:ExclusiveGateway';
+            
+            switch (gatewayType) {
+              case 'parallel':
+                bpmnType = 'bpmn:ParallelGateway';
+                break;
+              case 'inclusive':
+                bpmnType = 'bpmn:InclusiveGateway';
+                break;
+              case 'event':
+                bpmnType = 'bpmn:EventBasedGateway';
+                break;
+              default:
+                bpmnType = 'bpmn:ExclusiveGateway';
+            }
+
+            const gatewayBusinessObject = bpmnFactory.create(bpmnType, {
+              id: 'Gateway_' + Math.random().toString(36).substr(2, 9),
+              name: suggestion.details?.name || 'Decision Gateway'
+            });
+
+            const gatewayElement = elementFactory.createShape({ 
+              type: bpmnType,
+              businessObject: gatewayBusinessObject
+            });
+            
+            // Position near the specified element or at center
+            let gatewayPosition = { x: centerX, y: centerY };
+            if (suggestion.elementId) {
+              const targetElement = elementRegistry.get(suggestion.elementId);
+              if (targetElement && targetElement.x !== undefined && targetElement.y !== undefined) {
+                gatewayPosition = {
+                  x: targetElement.x + 150,
+                  y: targetElement.y
+                };
+              }
+            }
+            
+            const createdGateway = modeling.createShape(gatewayElement, gatewayPosition, canvas.getRootElement());
+            if (createdGateway) {
+              operationSuccess = true;
+              console.log('Gateway created successfully:', createdGateway.id);
+            }
+            break;
+
           case 'change-gateway':
             if (!suggestion.elementId) {
               throw new Error('No element ID specified for gateway change');
@@ -339,13 +388,13 @@ const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave, suggestions
             }
             
             const newGatewayType = suggestion.details?.gatewayType || 'bpmn:ExclusiveGateway';
-            const gatewayBusinessObject = bpmnFactory.create(newGatewayType, {
+            const changeGatewayBusinessObject = bpmnFactory.create(newGatewayType, {
               id: element.businessObject.id + '_new'
             });
             
             const newGateway = elementFactory.createShape({ 
               type: newGatewayType,
-              businessObject: gatewayBusinessObject
+              businessObject: changeGatewayBusinessObject
             });
             
             const replacedElement = modeling.replaceShape(element, newGateway);
@@ -407,7 +456,13 @@ const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave, suggestions
             break;
 
           default:
-            throw new Error(`Unknown suggestion type: ${suggestion.type}`);
+            console.error(`Unknown suggestion type: ${suggestion.type}`);
+            toast({
+              title: "Unsupported Suggestion",
+              description: `The suggestion type "${suggestion.type}" is not yet implemented. Available types: add-task, add-gateway, change-gateway, optimize-flow, add-role.`,
+              variant: "destructive",
+            });
+            return;
         }
       } catch (bpmnError) {
         console.error('BPMN operation failed:', bpmnError);
