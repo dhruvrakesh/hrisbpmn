@@ -138,38 +138,22 @@ const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave, suggestions
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
       
-      // Upload the modified XML to Supabase Storage with user ID path
-      const timestamp = Date.now();
-      const newFileName = `${timestamp}_${fileName}`;
-      const newFilePath = `${user.id}/${newFileName}`;
-      
-      const { error: uploadError } = await supabase.storage
-        .from('bpmn-files')
-        .upload(newFilePath, new Blob([xml], { type: 'application/xml' }), {
-          cacheControl: '3600',
-          upsert: false
-        });
+      // Create new version in the audit trail
+      const { data: versionData, error: versionError } = await supabase.rpc('create_ai_revised_version', {
+        p_bpmn_file_id: fileId,
+        p_revised_xml: xml,
+        p_suggestions_applied: JSON.stringify([]),
+        p_change_summary: 'Manual edit - diagram updated'
+      });
 
-      if (uploadError) throw uploadError;
-
-      // Update the database record
-      const { error: dbError } = await supabase
-        .from('bpmn_files')
-        .insert({
-          user_id: user.id,
-          file_name: newFileName,
-          file_path: newFilePath,
-          file_size: xml.length
-        });
-
-      if (dbError) throw dbError;
+      if (versionError) throw versionError;
 
       setHasChanges(false);
       onSave?.();
       
       toast({
         title: "Diagram Saved",
-        description: "Your BPMN diagram has been saved successfully.",
+        description: "Your BPMN diagram has been saved as a new version.",
       });
     } catch (error: any) {
       console.error('Error saving BPMN:', error);
@@ -312,6 +296,22 @@ const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave, suggestions
       
       // Mark as having changes
       setHasChanges(true);
+      
+      // Save the current state as a new version with AI suggestion applied
+      try {
+        const result = await bpmnModelerRef.current.saveXML({ format: true });
+        const { xml } = result;
+        
+        await supabase.rpc('create_ai_revised_version', {
+          p_bpmn_file_id: fileId,
+          p_revised_xml: xml,
+          p_suggestions_applied: JSON.stringify([suggestion]),
+          p_change_summary: `AI suggestion applied: ${suggestion.description}`
+        });
+      } catch (versionError) {
+        console.error('Error saving AI version:', versionError);
+        // Continue with the normal flow even if version saving fails
+      }
       
       toast({
         title: "Suggestion Applied",

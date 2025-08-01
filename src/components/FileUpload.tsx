@@ -49,6 +49,9 @@ const FileUpload = ({ onFileUploaded }: FileUploadProps) => {
         throw uploadError;
       }
 
+      // Read file content for version storage
+      const fileContent = await file.text();
+
       // Save file metadata to database
       const { data, error: dbError } = await supabase
         .from('bpmn_files')
@@ -63,6 +66,17 @@ const FileUpload = ({ onFileUploaded }: FileUploadProps) => {
 
       if (dbError) {
         throw dbError;
+      }
+
+      // Update the initial version with the actual BPMN XML content
+      try {
+        await supabase
+          .from('bpmn_versions')
+          .update({ bpmn_xml: fileContent })
+          .eq('bpmn_file_id', data.id)
+          .eq('version_number', 1);
+      } catch (versionError) {
+        console.warn('Failed to update initial version with XML content:', versionError);
       }
 
       toast({
