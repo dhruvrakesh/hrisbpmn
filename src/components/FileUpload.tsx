@@ -71,7 +71,7 @@ const FileUpload = ({ onFileUploaded }: FileUploadProps) => {
       // Create initial version and audit trail entry
       try {
         // Create initial version
-        await supabase
+        const { error: versionError } = await supabase
           .from('bpmn_versions')
           .insert({
             bpmn_file_id: data.id,
@@ -82,8 +82,13 @@ const FileUpload = ({ onFileUploaded }: FileUploadProps) => {
             change_summary: 'Initial upload',
           });
 
+        if (versionError) {
+          console.error('Version creation error:', versionError);
+          throw versionError;
+        }
+
         // Create audit trail entry
-        await supabase
+        const { error: auditError } = await supabase
           .from('bpmn_audit_trail')
           .insert({
             bpmn_file_id: data.id,
@@ -95,8 +100,16 @@ const FileUpload = ({ onFileUploaded }: FileUploadProps) => {
               version_created: 1
             }
           });
+
+        if (auditError) {
+          console.error('Audit trail creation error:', auditError);
+          throw auditError;
+        }
+
+        console.log('Successfully created initial version and audit trail for file:', data.id);
       } catch (versionError) {
-        console.warn('Failed to create initial version and audit:', versionError);
+        console.error('Failed to create initial version and audit:', versionError);
+        // Continue with upload success even if versioning fails
       }
 
       toast({

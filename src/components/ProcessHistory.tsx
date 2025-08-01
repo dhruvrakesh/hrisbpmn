@@ -89,19 +89,21 @@ export const ProcessHistory = ({ onFileSelect, currentFileId }: ProcessHistoryPr
     try {
       setFixingData(true);
       
-      // Check for files without versions
-      const { data: filesWithoutVersions } = await supabase
+      // Get all files and check which ones need versions/audit entries
+      const { data: allFiles, error: filesError } = await supabase
         .from('bpmn_files')
-        .select(`
-          id,
-          file_name,
-          file_path,
-          user_id,
-          file_size
-        `)
-        .not('id', 'in', 
-          '(SELECT DISTINCT bpmn_file_id FROM bpmn_versions)'
-        );
+        .select('id, file_name, file_path, user_id, file_size, uploaded_at');
+
+      if (filesError) throw filesError;
+
+      const { data: existingVersions, error: versionsError } = await supabase
+        .from('bpmn_versions')
+        .select('bpmn_file_id');
+
+      if (versionsError) throw versionsError;
+
+      const fileIdsWithVersions = new Set(existingVersions?.map(v => v.bpmn_file_id) || []);
+      const filesWithoutVersions = allFiles?.filter(f => !fileIdsWithVersions.has(f.id)) || [];
       
       if (!filesWithoutVersions || filesWithoutVersions.length === 0) {
         toast({
