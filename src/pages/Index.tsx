@@ -9,6 +9,7 @@ import AnalysisResults from '@/components/AnalysisResults';
 import AiChatInterface from '@/components/AiChatInterface';
 import UsageTracker from '@/components/UsageTracker';
 import { ProcessHistory } from '@/components/ProcessHistory';
+import TemplateManager from '@/components/TemplateManager';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
@@ -58,6 +59,7 @@ const Index = () => {
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [activeTab, setActiveTab] = useState("upload");
+  const [bpmnViewerRef, setBpmnViewerRef] = useState<any>(null);
 
   // Redirect to auth if not authenticated
   if (!authLoading && !user) {
@@ -128,6 +130,66 @@ const Index = () => {
     });
   };
 
+  const handleTemplateSelect = async (template: any) => {
+    try {
+      // Create a temporary file from template XML
+      const timestamp = Date.now();
+      const fileName = `template_${timestamp}_${template.template_name}.bpmn`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from('bpmn-files')
+        .upload(fileName, new Blob([template.bpmn_xml], { type: 'application/xml' }), {
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (uploadError) throw uploadError;
+
+      // Create a file record
+      const { data: fileData, error: dbError } = await supabase
+        .from('bpmn_files')
+        .insert({
+          user_id: user?.id,
+          file_name: fileName,
+          file_path: fileName,
+          file_size: template.bpmn_xml.length
+        })
+        .select()
+        .single();
+
+      if (dbError) throw dbError;
+
+      setUploadedFile({
+        id: fileData.id,
+        fileName: fileName,
+        filePath: fileName
+      });
+
+      setActiveTab("upload");
+      setAnalysisResult(null);
+      
+      toast({
+        title: "Template Loaded",
+        description: `Template "${template.template_name}" has been loaded for editing.`,
+      });
+    } catch (error: any) {
+      console.error('Error loading template:', error);
+      toast({
+        title: "Template Load Error",
+        description: error.message || "Failed to load template.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleApplySuggestion = async (suggestion: any) => {
+    // This will be handled directly by the BpmnViewer component
+    toast({
+      title: "Suggestion Applied",
+      description: suggestion.description,
+    });
+  };
+
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-background">
@@ -143,10 +205,11 @@ const Index = () => {
           </div>
 
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="upload">Upload & Analyze</TabsTrigger>
               <TabsTrigger value="results">Results</TabsTrigger>
               <TabsTrigger value="history">Process History</TabsTrigger>
+              <TabsTrigger value="templates">Templates</TabsTrigger>
             </TabsList>
 
             <TabsContent value="upload" className="space-y-6">
@@ -174,6 +237,7 @@ const Index = () => {
                   result={analysisResult}
                   loading={analyzing}
                   onRefresh={runAnalysis}
+                  onApplySuggestion={handleApplySuggestion}
                 />
               ) : (
                 <div className="text-center py-12">
@@ -186,6 +250,13 @@ const Index = () => {
               <ProcessHistory 
                 onFileSelect={handleFileSelect}
                 currentFileId={uploadedFile?.id}
+              />
+            </TabsContent>
+
+            <TabsContent value="templates" className="space-y-6">
+              <TemplateManager 
+                onTemplateSelect={handleTemplateSelect}
+                currentTemplateId={uploadedFile?.id}
               />
             </TabsContent>
           </Tabs>

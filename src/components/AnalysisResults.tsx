@@ -14,7 +14,9 @@ import {
   RefreshCw,
   Download,
   FileText,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Zap,
+  Play
 } from 'lucide-react';
 
 interface Finding {
@@ -46,6 +48,13 @@ interface AnalysisResult {
     recommendations: string[];
     riskAssessment: string;
     complianceNotes: string[];
+    editingSuggestions?: Array<{
+      id: string;
+      type: 'add-task' | 'change-gateway' | 'optimize-flow' | 'add-role';
+      elementId?: string;
+      description: string;
+      details: any;
+    }>;
   };
   findings: Finding[];
 }
@@ -54,9 +63,10 @@ interface AnalysisResultsProps {
   result: AnalysisResult | null;
   loading: boolean;
   onRefresh?: () => void;
+  onApplySuggestion?: (suggestion: any) => void;
 }
 
-const AnalysisResults = ({ result, loading, onRefresh }: AnalysisResultsProps) => {
+const AnalysisResults = ({ result, loading, onRefresh, onApplySuggestion }: AnalysisResultsProps) => {
   const [selectedFinding, setSelectedFinding] = useState<Finding | null>(null);
   const { exportAnalysisToPDF, exportAnalysisToExcel } = useExport();
   const { toast } = useToast();
@@ -307,6 +317,50 @@ const AnalysisResults = ({ result, loading, onRefresh }: AnalysisResultsProps) =
                 <p className="text-sm">{result.processIntelligence.riskAssessment}</p>
               </div>
             )}
+          </div>
+        )}
+
+        {/* AI Editing Suggestions */}
+        {result.processIntelligence?.editingSuggestions && result.processIntelligence.editingSuggestions.length > 0 && (
+          <div className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/20 dark:to-teal-950/20 p-6 rounded-lg border">
+            <h3 className="text-lg font-semibold mb-4 flex items-center">
+              <Zap className="h-5 w-5 text-emerald-600 mr-2" />
+              AI Editing Suggestions
+            </h3>
+            <div className="space-y-4">
+              {result.processIntelligence.editingSuggestions.map((suggestion) => (
+                <div key={suggestion.id} className="flex items-start justify-between p-4 bg-white dark:bg-gray-800/50 rounded-lg border">
+                  <div className="flex-1">
+                    <div className="flex items-center space-x-2 mb-2">
+                      <Badge variant="outline" className="text-xs">
+                        {suggestion.type.replace('-', ' ').toUpperCase()}
+                      </Badge>
+                      {suggestion.elementId && (
+                        <Badge variant="secondary" className="text-xs">
+                          {suggestion.elementId}
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-sm font-medium mb-1">{suggestion.description}</p>
+                    {suggestion.details?.implementation && (
+                      <p className="text-xs text-muted-foreground">
+                        {suggestion.details.implementation}
+                      </p>
+                    )}
+                  </div>
+                  {onApplySuggestion && (
+                    <Button 
+                      size="sm" 
+                      className="ml-4 flex-shrink-0"
+                      onClick={() => onApplySuggestion(suggestion)}
+                    >
+                      <Play className="h-3 w-3 mr-1" />
+                      Apply
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

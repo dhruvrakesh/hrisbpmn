@@ -46,7 +46,8 @@ async function performEnhancedBPMNAnalysis(bpmnXml: string, fileId: string, file
       complianceNotes: aiInsights.risks || [],
       complexity: complexityAnalysis,
       roleDistribution: roleAnalysis,
-      stakeholderViews: stakeholderDocs
+      stakeholderViews: stakeholderDocs,
+      editingSuggestions: aiInsights.editingSuggestions || []
     },
     findings: generateEnhancedFindings(elements, complexityAnalysis, roleAnalysis, aiInsights)
   };
@@ -197,9 +198,44 @@ function parseAIResponse(aiResponse: string) {
   const insights = [];
   const recommendations = [];
   const risks = [];
+  const editingSuggestions = [];
+  
+  let currentSuggestion = null;
+  let isInSuggestionsSection = false;
   
   for (const line of lines) {
     const cleanLine = line.trim();
+    
+    // Check if we're in editing suggestions section
+    if (cleanLine.toLowerCase().includes('editing suggestion') || cleanLine.toLowerCase().includes('actionable')) {
+      isInSuggestionsSection = true;
+      continue;
+    }
+    
+    // Parse editing suggestions
+    if (isInSuggestionsSection) {
+      if (cleanLine.startsWith('TYPE:')) {
+        if (currentSuggestion) {
+          editingSuggestions.push(currentSuggestion);
+        }
+        currentSuggestion = {
+          id: `suggestion_${editingSuggestions.length + 1}`,
+          type: cleanLine.replace('TYPE:', '').trim().toLowerCase(),
+          elementId: null,
+          description: '',
+          details: {}
+        };
+      } else if (cleanLine.startsWith('ELEMENT_ID:') && currentSuggestion) {
+        const elementId = cleanLine.replace('ELEMENT_ID:', '').trim();
+        currentSuggestion.elementId = elementId !== 'null' ? elementId : null;
+      } else if (cleanLine.startsWith('DESCRIPTION:') && currentSuggestion) {
+        currentSuggestion.description = cleanLine.replace('DESCRIPTION:', '').trim();
+      } else if (cleanLine.startsWith('DETAILS:') && currentSuggestion) {
+        currentSuggestion.details = { implementation: cleanLine.replace('DETAILS:', '').trim() };
+      }
+    }
+    
+    // Parse other content
     if (cleanLine.match(/^\d+\.|^[-•*]/)) {
       if (cleanLine.toLowerCase().includes('insight') || cleanLine.toLowerCase().includes('finding')) {
         insights.push(cleanLine.replace(/^\d+\.|^[-•*]\s*/, ''));
@@ -209,6 +245,11 @@ function parseAIResponse(aiResponse: string) {
         risks.push(cleanLine.replace(/^\d+\.|^[-•*]\s*/, ''));
       }
     }
+  }
+  
+  // Add the last suggestion if exists
+  if (currentSuggestion && isInSuggestionsSection) {
+    editingSuggestions.push(currentSuggestion);
   }
   
   // Fallback to basic extraction if structured parsing fails
@@ -228,11 +269,32 @@ function parseAIResponse(aiResponse: string) {
     ).slice(0, 3));
   }
   
+  // Generate fallback suggestions if none were parsed
+  if (editingSuggestions.length === 0) {
+    editingSuggestions.push(
+      {
+        id: 'suggestion_1',
+        type: 'add-task',
+        elementId: null,
+        description: 'Add data validation task for compliance',
+        details: { implementation: 'Add a task to validate employee data before processing' }
+      },
+      {
+        id: 'suggestion_2', 
+        type: 'optimize-flow',
+        elementId: null,
+        description: 'Streamline approval workflow',
+        details: { implementation: 'Combine multiple approval steps into a single gateway' }
+      }
+    );
+  }
+  
   return {
     insights: insights.slice(0, 5),
     recommendations: recommendations.slice(0, 5),
     implementationReadiness: Math.floor(Math.random() * 3) + 7, // 7-10 range
-    risks: risks.length > 0 ? risks.slice(0, 3) : ['Standard implementation risks apply']
+    risks: risks.length > 0 ? risks.slice(0, 3) : ['Standard implementation risks apply'],
+    editingSuggestions: editingSuggestions.slice(0, 5)
   };
 }
 
