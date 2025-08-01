@@ -3,8 +3,9 @@ import BpmnModeler from 'bpmn-js/dist/bpmn-modeler.production.min.js';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { ZoomIn, ZoomOut, RotateCcw, Play, Save, Undo, Redo, FolderOpen, Download } from 'lucide-react';
+import { ZoomIn, ZoomOut, RotateCcw, Play, Save, Undo, Redo, FolderOpen, Download, Zap } from 'lucide-react';
 
 interface BpmnViewerProps {
   fileId: string;
@@ -12,6 +13,8 @@ interface BpmnViewerProps {
   filePath: string;
   onAnalyze?: () => void;
   onSave?: () => void;
+  suggestions?: AIEditingSuggestion[];
+  onSuggestionApplied?: (suggestion: AIEditingSuggestion) => void;
 }
 
 interface AIEditingSuggestion {
@@ -22,12 +25,11 @@ interface AIEditingSuggestion {
   details: any;
 }
 
-const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave }: BpmnViewerProps) => {
+const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave, suggestions = [], onSuggestionApplied }: BpmnViewerProps) => {
   const viewerRef = useRef<HTMLDivElement>(null);
   const bpmnModelerRef = useRef<any>(null);
   const [loading, setLoading] = useState(true);
   const [hasChanges, setHasChanges] = useState(false);
-  const [suggestions, setSuggestions] = useState<AIEditingSuggestion[]>([]);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -208,38 +210,103 @@ const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave }: BpmnViewe
   };
 
   const applySuggestion = async (suggestion: AIEditingSuggestion) => {
+    if (!bpmnModelerRef.current) return;
+
     try {
-      const modeling = bpmnModelerRef.current.get('modeling');
-      const elementFactory = bpmnModelerRef.current.get('elementFactory');
-      const elementRegistry = bpmnModelerRef.current.get('elementRegistry');
-      
+      const modeler = bpmnModelerRef.current;
+      const modeling = modeler.get('modeling');
+      const elementFactory = modeler.get('elementFactory');
+      const elementRegistry = modeler.get('elementRegistry');
+      const canvas = modeler.get('canvas');
+
+      // Get canvas dimensions for intelligent positioning
+      const viewbox = canvas.viewbox();
+      const centerX = viewbox.x + (viewbox.width / 2);
+      const centerY = viewbox.y + (viewbox.height / 2);
+
       switch (suggestion.type) {
         case 'add-task':
-          const businessObject = elementFactory.createShape({ type: 'bpmn:Task' });
-          modeling.createShape(businessObject, { x: 300, y: 200 }, elementRegistry.get('Process_1'));
+          // Create new task with intelligent positioning
+          const taskElement = elementFactory.createShape({ 
+            type: 'bpmn:Task',
+            businessObject: modeler.get('bpmnFactory').create('bpmn:Task', {
+              name: suggestion.details?.name || 'New Task'
+            })
+          });
+          
+          // Position near the specified element or at center
+          let position = { x: centerX, y: centerY };
+          if (suggestion.elementId) {
+            const targetElement = elementRegistry.get(suggestion.elementId);
+            if (targetElement) {
+              position = {
+                x: targetElement.x + 150,
+                y: targetElement.y
+              };
+            }
+          }
+          
+          modeling.createShape(taskElement, position, canvas.getRootElement());
           break;
+
         case 'change-gateway':
           if (suggestion.elementId) {
             const element = elementRegistry.get(suggestion.elementId);
-            if (element) {
-              modeling.replaceShape(element, elementFactory.createShape({ type: 'bpmn:ExclusiveGateway' }));
+            if (element && element.type.includes('Gateway')) {
+              const newGatewayType = suggestion.details?.gatewayType || 'bpmn:ExclusiveGateway';
+              const newGateway = elementFactory.createShape({ type: newGatewayType });
+              modeling.replaceShape(element, newGateway);
             }
           }
           break;
-        // Add more suggestion types as needed
+
+        case 'optimize-flow':
+          // Remove unnecessary intermediate events or simplify paths
+          if (suggestion.details?.removeElements) {
+            suggestion.details.removeElements.forEach((elementId: string) => {
+              const element = elementRegistry.get(elementId);
+              if (element) {
+                modeling.removeShape(element);
+              }
+            });
+          }
+          break;
+
+        case 'add-role':
+          // Add a new lane with role assignment
+          const laneElement = elementFactory.createShape({ 
+            type: 'bpmn:Lane',
+            businessObject: modeler.get('bpmnFactory').create('bpmn:Lane', {
+              name: suggestion.details?.roleName || 'New Role'
+            })
+          });
+          
+          // Try to add to existing participant or create new one
+          const participants = elementRegistry.filter(element => element.type === 'bpmn:Participant');
+          if (participants.length > 0) {
+            modeling.createShape(laneElement, { x: 0, y: 0 }, participants[0]);
+          }
+          break;
+
+        default:
+          console.warn('Unknown suggestion type:', suggestion.type);
       }
       
-      setSuggestions(prev => prev.filter(s => s.id !== suggestion.id));
+      // Mark as having changes
+      setHasChanges(true);
       
       toast({
         title: "Suggestion Applied",
         description: suggestion.description,
       });
-    } catch (error: any) {
+
+      // Notify parent component
+      onSuggestionApplied?.(suggestion);
+    } catch (error) {
       console.error('Error applying suggestion:', error);
       toast({
-        title: "Application Error",
-        description: "Failed to apply suggestion.",
+        title: "Error",
+        description: "Failed to apply suggestion. The element might not exist or the operation is not valid.",
         variant: "destructive",
       });
     }
@@ -312,16 +379,36 @@ const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave }: BpmnViewe
         
         {/* AI Suggestions Panel */}
         {suggestions.length > 0 && (
-          <div className="mt-4 p-4 border rounded-md bg-muted">
-            <h4 className="font-semibold mb-3">AI Editing Suggestions</h4>
-            <div className="space-y-2">
+          <div className="mt-4 p-4 border rounded-md bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/20 dark:to-teal-950/20 border-emerald-200 dark:border-emerald-800">
+            <h4 className="font-semibold mb-3 text-emerald-800 dark:text-emerald-200 flex items-center">
+              <Zap className="h-4 w-4 mr-2" />
+              AI Editing Suggestions ({suggestions.length} available)
+            </h4>
+            <div className="space-y-3 max-h-48 overflow-y-auto">
               {suggestions.map((suggestion) => (
-                <div key={suggestion.id} className="flex items-center justify-between p-2 bg-background rounded border">
-                  <span className="text-sm">{suggestion.description}</span>
+                <div key={suggestion.id} className="flex items-start justify-between p-3 bg-white dark:bg-gray-800/50 rounded border shadow-sm">
+                  <div className="flex-1">
+                    <div className="flex items-center space-x-2 mb-1">
+                      <Badge variant="outline" className="text-xs bg-emerald-100 text-emerald-700 border-emerald-300">
+                        {suggestion.type.replace('-', ' ').toUpperCase()}
+                      </Badge>
+                      {suggestion.elementId && (
+                        <Badge variant="secondary" className="text-xs">
+                          {suggestion.elementId}
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-sm font-medium mb-1">{suggestion.description}</p>
+                    {suggestion.details?.implementation && (
+                      <p className="text-xs text-muted-foreground">
+                        {suggestion.details.implementation}
+                      </p>
+                    )}
+                  </div>
                   <Button 
                     size="sm" 
                     onClick={() => applySuggestion(suggestion)}
-                    className="ml-2"
+                    className="ml-3 bg-emerald-600 hover:bg-emerald-700 text-white"
                   >
                     Apply
                   </Button>

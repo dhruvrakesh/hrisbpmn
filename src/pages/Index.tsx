@@ -39,6 +39,13 @@ interface AnalysisResult {
     recommendations: string[];
     riskAssessment: string;
     complianceNotes: string[];
+    editingSuggestions?: Array<{
+      id: string;
+      type: 'add-task' | 'change-gateway' | 'optimize-flow' | 'add-role';
+      elementId?: string;
+      description: string;
+      details: any;
+    }>;
   };
   findings: Array<{
     id: string;
@@ -183,7 +190,20 @@ const Index = () => {
   };
 
   const handleApplySuggestion = async (suggestion: any) => {
-    // This will be handled directly by the BpmnViewer component
+    // Remove the applied suggestion from analysis results
+    if (analysisResult?.processIntelligence?.editingSuggestions) {
+      const updatedSuggestions = analysisResult.processIntelligence.editingSuggestions.filter(
+        (s: any) => s.id !== suggestion.id
+      );
+      setAnalysisResult({
+        ...analysisResult,
+        processIntelligence: {
+          ...analysisResult.processIntelligence,
+          editingSuggestions: updatedSuggestions
+        }
+      });
+    }
+    
     toast({
       title: "Suggestion Applied",
       description: suggestion.description,
@@ -226,6 +246,8 @@ const Index = () => {
                     fileName={uploadedFile.fileName}
                     filePath={uploadedFile.filePath}
                     onAnalyze={runAnalysis}
+                    suggestions={analysisResult?.processIntelligence?.editingSuggestions || []}
+                    onSuggestionApplied={handleApplySuggestion}
                   />
                 )}
               </div>

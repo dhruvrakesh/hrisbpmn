@@ -126,7 +126,7 @@ async function getAIProcessInsights(bpmnXml: string, elements: any, complexity: 
       return { insights: ['AI analysis unavailable - API key not configured'], recommendations: [] };
     }
 
-    const prompt = `Analyze this HRIS BPMN process and provide enterprise-grade insights:
+    const prompt = `Analyze this HRIS BPMN process and provide enterprise-grade insights WITH editing suggestions:
 
 Process Overview:
 - Total Elements: ${complexity.totalElements}
@@ -139,13 +139,33 @@ Process Overview:
 - Total Roles: ${roles.totalRoles}
 
 Key Tasks:
-${elements.userTasks.map(task => `- ${task.name}`).join('\n')}
+${elements.userTasks.map((task, index) => `- ${task.name} (ID: Task_${index + 1})`).join('\n')}
+
+Gateways:
+${elements.gateways.map((gateway, index) => `- ${gateway.name || 'Gateway'} (ID: Gateway_${index + 1})`).join('\n')}
 
 Please provide:
 1. 3-5 key insights about this HRIS process
 2. 3-5 specific recommendations for improvement
 3. Implementation readiness assessment (1-10 score)
 4. Potential risks and mitigation strategies
+5. EDITING SUGGESTIONS: Provide specific, actionable BPMN editing suggestions
+
+For editing suggestions, format EXACTLY like this:
+TYPE: add-task
+ELEMENT_ID: Task_1
+DESCRIPTION: Add validation step after data entry
+IMPLEMENTATION: Insert validation task between Task_1 and the next element
+
+TYPE: change-gateway
+ELEMENT_ID: Gateway_1  
+DESCRIPTION: Change to parallel gateway for better performance
+IMPLEMENTATION: Replace exclusive gateway with parallel gateway
+
+TYPE: optimize-flow
+ELEMENT_ID: Task_2
+DESCRIPTION: Remove redundant approval step
+IMPLEMENTATION: Connect Task_2 directly to next step, bypass approval
 
 Focus on HRIS best practices, compliance, and stakeholder experience.`;
 
@@ -230,8 +250,8 @@ function parseAIResponse(aiResponse: string) {
         currentSuggestion.elementId = elementId !== 'null' ? elementId : null;
       } else if (cleanLine.startsWith('DESCRIPTION:') && currentSuggestion) {
         currentSuggestion.description = cleanLine.replace('DESCRIPTION:', '').trim();
-      } else if (cleanLine.startsWith('DETAILS:') && currentSuggestion) {
-        currentSuggestion.details = { implementation: cleanLine.replace('DETAILS:', '').trim() };
+      } else if (cleanLine.startsWith('IMPLEMENTATION:') && currentSuggestion) {
+        currentSuggestion.details = { implementation: cleanLine.replace('IMPLEMENTATION:', '').trim() };
       }
     }
     
