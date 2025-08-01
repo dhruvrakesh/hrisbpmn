@@ -5,7 +5,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { ZoomIn, ZoomOut, RotateCcw, Play, Save, Undo, Redo, FolderOpen, Download, Zap } from 'lucide-react';
+import { ZoomIn, ZoomOut, RotateCcw, Play, Save, Undo, Redo, FolderOpen, Download, Zap, Edit3, Info } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import BizagiIntegration from './BizagiIntegration';
 
 interface BpmnViewerProps {
   fileId: string;
@@ -30,7 +32,18 @@ const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave, suggestions
   const bpmnModelerRef = useRef<any>(null);
   const [loading, setLoading] = useState(true);
   const [hasChanges, setHasChanges] = useState(false);
+  const [currentBpmnXml, setCurrentBpmnXml] = useState<string>('');
   const { toast } = useToast();
+
+  const getCurrentBpmnXml = async (): Promise<string> => {
+    if (!bpmnModelerRef.current) return '';
+    try {
+      const result = await bpmnModelerRef.current.saveXML({ format: true });
+      return result.xml;
+    } catch {
+      return '';
+    }
+  };
 
   useEffect(() => {
     if (!viewerRef.current) return;
@@ -318,54 +331,137 @@ const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave, suggestions
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="flex items-center space-x-2">
-              <span>BPMN Editor</span>
-              {hasChanges && <span className="text-sm text-orange-500">●</span>}
-            </CardTitle>
-            <CardDescription>{fileName}</CardDescription>
-          </div>
-          <div className="flex items-center space-x-2">
-            {/* Editing Controls */}
-            <Button variant="outline" size="sm" onClick={handleSave} disabled={!hasChanges}>
-              <Save className="h-4 w-4" />
-            </Button>
-            <Button variant="outline" size="sm" onClick={handleUndo}>
-              <Undo className="h-4 w-4" />
-            </Button>
-            <Button variant="outline" size="sm" onClick={handleRedo}>
-              <Redo className="h-4 w-4" />
-            </Button>
-            <Button variant="outline" size="sm" onClick={handleSaveAsTemplate}>
-              <FolderOpen className="h-4 w-4" />
-            </Button>
-            
-            {/* View Controls */}
-            <div className="border-l pl-2 ml-2">
-              <Button variant="outline" size="sm" onClick={handleZoomIn}>
-                <ZoomIn className="h-4 w-4" />
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleZoomOut}>
-                <ZoomOut className="h-4 w-4" />
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleResetZoom}>
-                <RotateCcw className="h-4 w-4" />
-              </Button>
+    <TooltipProvider>
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center space-x-2">
+                <Edit3 className="h-5 w-5 text-primary" />
+                <span>BPMN Editor</span>
+                {hasChanges && (
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <span className="text-sm text-orange-500 animate-pulse">●</span>
+                    </TooltipTrigger>
+                    <TooltipContent>Unsaved changes</TooltipContent>
+                  </Tooltip>
+                )}
+                {!loading && !hasChanges && (
+                  <Badge variant="secondary" className="text-xs bg-green-100 text-green-700 border-green-300">
+                    Ready to Edit
+                  </Badge>
+                )}
+              </CardTitle>
+              <CardDescription className="flex items-center space-x-2">
+                <span>{fileName}</span>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Info className="h-3 w-3 text-muted-foreground" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <div className="text-xs">
+                      <p>• Click elements to select and edit</p>
+                      <p>• Use palette on left to add elements</p>
+                      <p>• Right-click for context menu</p>
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              </CardDescription>
             </div>
-            
-            {/* Analysis */}
-            {onAnalyze && (
-              <Button onClick={onAnalyze} className="ml-4">
-                <Play className="h-4 w-4 mr-2" />
-                AI Analysis
-              </Button>
-            )}
+            <div className="flex items-center space-x-2">
+              {/* Editing Controls */}
+              <div className="flex items-center space-x-1">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="outline" size="sm" onClick={handleSave} disabled={!hasChanges}>
+                      <Save className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Save to Process History</TooltipContent>
+                </Tooltip>
+                
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="outline" size="sm" onClick={handleUndo}>
+                      <Undo className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Undo</TooltipContent>
+                </Tooltip>
+                
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="outline" size="sm" onClick={handleRedo}>
+                      <Redo className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Redo</TooltipContent>
+                </Tooltip>
+                
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="outline" size="sm" onClick={handleSaveAsTemplate}>
+                      <FolderOpen className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Save as Template</TooltipContent>
+                </Tooltip>
+              </div>
+              
+              {/* View Controls */}
+              <div className="border-l pl-2 ml-2 flex items-center space-x-1">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="outline" size="sm" onClick={handleZoomIn}>
+                      <ZoomIn className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Zoom In</TooltipContent>
+                </Tooltip>
+                
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="outline" size="sm" onClick={handleZoomOut}>
+                      <ZoomOut className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Zoom Out</TooltipContent>
+                </Tooltip>
+                
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="outline" size="sm" onClick={handleResetZoom}>
+                      <RotateCcw className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Fit to View</TooltipContent>
+                </Tooltip>
+              </div>
+              
+              {/* Bizagi Integration */}
+              <div className="border-l pl-2 ml-2">
+                <BizagiIntegration 
+                  getBpmnXml={getCurrentBpmnXml}
+                  fileName={fileName}
+                />
+              </div>
+              
+              {/* Analysis */}
+              {onAnalyze && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button onClick={onAnalyze} className="ml-4">
+                      <Play className="h-4 w-4 mr-2" />
+                      AI Analysis
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Analyze process with AI</TooltipContent>
+                </Tooltip>
+              )}
+            </div>
           </div>
-        </div>
-      </CardHeader>
+        </CardHeader>
       <CardContent>
         <div className="relative">
           <div
@@ -424,6 +520,7 @@ const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave, suggestions
         )}
       </CardContent>
     </Card>
+    </TooltipProvider>
   );
 };
 

@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { FileText, Download, Trash2, Eye, Share2 } from 'lucide-react';
+import { FileText, Download, Trash2, Eye, Share2, RefreshCw } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
 interface Template {
@@ -32,7 +32,45 @@ const TemplateManager = ({ onTemplateSelect, currentTemplateId }: TemplateManage
 
   useEffect(() => {
     loadTemplates();
-  }, []);
+
+    // Set up real-time subscription for template changes
+    const channel = supabase
+      .channel('bpmn_templates_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'bpmn_templates'
+        },
+        (payload) => {
+          console.log('Template change detected:', payload);
+          
+          if (payload.eventType === 'INSERT') {
+            setTemplates(prev => [payload.new as Template, ...prev]);
+            toast({
+              title: "New Template",
+              description: `Template "${(payload.new as Template).template_name}" has been added.`,
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            setTemplates(prev => 
+              prev.map(t => 
+                t.id === payload.new.id 
+                  ? { ...t, ...(payload.new as Template) }
+                  : t
+              )
+            );
+          } else if (payload.eventType === 'DELETE') {
+            setTemplates(prev => prev.filter(t => t.id !== payload.old.id));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [toast]);
 
   const loadTemplates = async () => {
     try {
@@ -145,18 +183,30 @@ const TemplateManager = ({ onTemplateSelect, currentTemplateId }: TemplateManage
 
   return (
     <div className="space-y-4">
-      {/* Category Filter */}
-      <div className="flex gap-2 mb-4">
-        {categories.map(category => (
-          <Button
-            key={category}
-            variant={selectedCategory === category ? "default" : "outline"}
-            size="sm"
-            onClick={() => setSelectedCategory(category)}
-          >
-            {category.charAt(0).toUpperCase() + category.slice(1)}
-          </Button>
-        ))}
+      {/* Category Filter and Refresh */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex gap-2">
+          {categories.map(category => (
+            <Button
+              key={category}
+              variant={selectedCategory === category ? "default" : "outline"}
+              size="sm"
+              onClick={() => setSelectedCategory(category)}
+            >
+              {category.charAt(0).toUpperCase() + category.slice(1)}
+            </Button>
+          ))}
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={loadTemplates}
+          disabled={loading}
+          className="flex items-center gap-2"
+        >
+          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          Refresh
+        </Button>
       </div>
 
       {filteredTemplates.length === 0 ? (
