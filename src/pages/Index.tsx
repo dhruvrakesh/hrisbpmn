@@ -261,6 +261,11 @@ const Index = () => {
     // Check if suggestion was already applied
     if (appliedSuggestions.has(suggestion.id)) {
       console.log('⚠️ Suggestion already applied:', suggestion.id);
+      toast({
+        title: "Already Applied",
+        description: `Suggestion "${suggestion.description}" has already been applied.`,
+        variant: "default",
+      });
       return;
     }
 

@@ -308,10 +308,11 @@ const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave, suggestions
     // Set cooldown (3 seconds)
     setCooldownUntil(now + 3000);
 
-    // Show loading state
-    toast({
-      title: "Applying Suggestion",
-      description: "Modifying your BPMN diagram...",
+    // Show loading state with proper ID for dismissal
+    const loadingToast = toast({
+      title: "🔄 Applying Suggestion",
+      description: `Modifying your BPMN diagram: ${suggestion.description}`,
+      duration: 0, // Don't auto-dismiss
     });
 
     try {
@@ -552,12 +553,27 @@ const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave, suggestions
 
       // Save the updated diagram with AI revision
       console.log('💾 Saving AI-revised BPMN to database...');
-      await saveAIRevision(suggestion, operationDetails, createdElementId);
-
-      toast({
-        title: "Success!",
-        description: `AI suggestion applied: ${operationDetails}`,
-      });
+      const saveResult = await saveAIRevision(suggestion, operationDetails, createdElementId);
+      
+      // Dismiss loading toast and show success
+      if (loadingToast && typeof loadingToast.dismiss === 'function') {
+        loadingToast.dismiss();
+      }
+      
+      if (saveResult.success) {
+        toast({
+          title: "✅ Success!",
+          description: `AI suggestion applied: ${operationDetails}`,
+          duration: 4000,
+        });
+      } else {
+        toast({
+          title: "⚠️ Partially Applied",
+          description: "Changes made to diagram but may not be saved. Please save manually.",
+          variant: "default",
+          duration: 6000,
+        });
+      }
 
       // Trigger suggestion applied callback to remove from list
       onSuggestionApplied?.(suggestion);
@@ -856,37 +872,77 @@ const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave, suggestions
               AI Editing Suggestions ({suggestions.length} available)
             </h4>
             <div className="space-y-3">
-              {suggestions.map((suggestion, index) => (
-                <div key={suggestion.id} className="flex items-start justify-between p-3 bg-white dark:bg-gray-800/50 rounded border shadow-sm">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-2 mb-1">
-                      <Badge variant="outline" className="text-xs bg-emerald-100 text-emerald-700 border-emerald-300">
-                        {suggestion.type.replace('-', ' ').toUpperCase()}
-                      </Badge>
-                      {suggestion.elementId && (
-                        <Badge variant="secondary" className="text-xs">
-                          {suggestion.elementId}
+              {suggestions.map((suggestion, index) => {
+                const isApplied = appliedSuggestions.has(suggestion.id);
+                const isDisabled = isApplied || isOperationInProgress || Date.now() < cooldownUntil || !bpmnModelerRef.current;
+                
+                return (
+                  <div 
+                    key={suggestion.id} 
+                    className={`flex items-start justify-between p-3 rounded border shadow-sm transition-colors ${
+                      isApplied 
+                        ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800' 
+                        : 'bg-white dark:bg-gray-800/50'
+                    }`}
+                  >
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-2 mb-1">
+                        <Badge variant="outline" className={`text-xs ${
+                          isApplied 
+                            ? 'bg-green-100 text-green-700 border-green-300' 
+                            : 'bg-emerald-100 text-emerald-700 border-emerald-300'
+                        }`}>
+                          {suggestion.type.replace('-', ' ').toUpperCase()}
                         </Badge>
+                        {suggestion.elementId && (
+                          <Badge variant="secondary" className="text-xs">
+                            {suggestion.elementId}
+                          </Badge>
+                        )}
+                        {isApplied && (
+                          <Badge variant="default" className="text-xs bg-green-100 text-green-700">
+                            ✅ Applied
+                          </Badge>
+                        )}
+                      </div>
+                      <p className={`text-sm font-medium mb-1 ${isApplied ? 'text-green-800 dark:text-green-200' : ''}`}>
+                        {isApplied ? '✅ ' : ''}{suggestion.description}
+                      </p>
+                      {suggestion.details?.implementation && (
+                        <p className="text-xs text-muted-foreground">
+                          {suggestion.details.implementation}
+                        </p>
+                      )}
+                      {isApplied && (
+                        <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                          Successfully applied to your diagram
+                        </p>
                       )}
                     </div>
-                    <p className="text-sm font-medium mb-1">{suggestion.description}</p>
-                    {suggestion.details?.implementation && (
-                      <p className="text-xs text-muted-foreground">
-                        {suggestion.details.implementation}
-                      </p>
-                    )}
+                    <Button 
+                      size="sm" 
+                      onClick={() => applySuggestion(suggestion)}
+                      className={`ml-3 ${
+                        isApplied 
+                          ? 'bg-green-600 hover:bg-green-700 text-white'
+                          : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                      }`}
+                      disabled={isDisabled}
+                    >
+                      {isApplied ? (
+                        <>✅ Applied</>
+                      ) : isOperationInProgress ? (
+                        <>⏳ Wait</>
+                      ) : (
+                        <>
+                          <Play className="h-3 w-3 mr-1" />
+                          Apply
+                        </>
+                      )}
+                    </Button>
                   </div>
-                  <Button 
-                    size="sm" 
-                    onClick={() => applySuggestion(suggestion)}
-                    className="ml-3 bg-emerald-600 hover:bg-emerald-700 text-white"
-                    disabled={!bpmnModelerRef.current}
-                  >
-                    <Play className="h-3 w-3 mr-1" />
-                    Apply
-                  </Button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
