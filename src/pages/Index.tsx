@@ -139,13 +139,16 @@ const Index = () => {
 
   const handleTemplateSelect = async (template: any) => {
     try {
+      if (!user) throw new Error('User not authenticated');
+      
       // Create a temporary file from template XML
       const timestamp = Date.now();
       const fileName = `template_${timestamp}_${template.template_name}.bpmn`;
+      const filePath = `${user.id}/${fileName}`;
       
       const { error: uploadError } = await supabase.storage
         .from('bpmn-files')
-        .upload(fileName, new Blob([template.bpmn_xml], { type: 'application/xml' }), {
+        .upload(filePath, new Blob([template.bpmn_xml], { type: 'application/xml' }), {
           cacheControl: '3600',
           upsert: false
         });
@@ -156,9 +159,9 @@ const Index = () => {
       const { data: fileData, error: dbError } = await supabase
         .from('bpmn_files')
         .insert({
-          user_id: user?.id,
+          user_id: user.id,
           file_name: fileName,
-          file_path: fileName,
+          file_path: filePath,
           file_size: template.bpmn_xml.length
         })
         .select()
