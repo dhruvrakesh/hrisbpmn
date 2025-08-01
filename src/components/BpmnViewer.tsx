@@ -121,13 +121,18 @@ const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave, suggestions
       const result = await bpmnModelerRef.current.saveXML({ format: true });
       const { xml } = result;
       
-      // Upload the modified XML to Supabase Storage
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+      
+      // Upload the modified XML to Supabase Storage with user ID path
       const timestamp = Date.now();
       const newFileName = `${timestamp}_${fileName}`;
+      const newFilePath = `${user.id}/${newFileName}`;
       
       const { error: uploadError } = await supabase.storage
         .from('bpmn-files')
-        .upload(newFileName, new Blob([xml], { type: 'application/xml' }), {
+        .upload(newFilePath, new Blob([xml], { type: 'application/xml' }), {
           cacheControl: '3600',
           upsert: false
         });
@@ -138,9 +143,9 @@ const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave, suggestions
       const { error: dbError } = await supabase
         .from('bpmn_files')
         .insert({
-          user_id: (await supabase.auth.getUser()).data.user?.id,
+          user_id: user.id,
           file_name: newFileName,
-          file_path: newFileName,
+          file_path: newFilePath,
           file_size: xml.length
         });
 
