@@ -52,6 +52,8 @@ async function performEnhancedBPMNAnalysis(bpmnXml: string, fileId: string, file
 
 // Enhanced BPMN element extraction with better pattern matching
 function extractBPMNElements(bpmnXml: string) {
+  console.log('🔍 Extracting BPMN elements from XML...');
+  
   const elements = {
     userTasks: extractElementsWithRegex(bpmnXml, /<bpmn:userTask[^>]*id="([^"]*)"(?:[^>]*name="([^"]*)")?[^>]*>/g),
     serviceTasks: extractElementsWithRegex(bpmnXml, /<bpmn:serviceTask[^>]*id="([^"]*)"(?:[^>]*name="([^"]*)")?[^>]*>/g),
@@ -77,7 +79,14 @@ function extractBPMNElements(bpmnXml: string) {
     ...elements.endEvents.map(e => e.id)
   ].filter(id => id && id.trim() !== '');
   
-  console.log(`Extracted ${elements.allElements.length} valid element IDs:`, elements.allElements.slice(0, 5));
+  console.log(`✅ Extracted ${elements.allElements.length} valid element IDs:`, elements.allElements.slice(0, 5));
+  console.log('📊 Element breakdown:', {
+    userTasks: elements.userTasks.length,
+    serviceTasks: elements.serviceTasks.length,
+    gateways: elements.exclusiveGateways.length + elements.parallelGateways.length + elements.inclusiveGateways.length,
+    events: elements.startEvents.length + elements.endEvents.length,
+    lanes: elements.lanes.length
+  });
   
   return elements;
 }
@@ -220,6 +229,7 @@ Also provide insights and recommendations for process optimization.`;
 }
 
 function parseAIResponse(aiResponse: string, elements: any) {
+  console.log('🔄 Parsing AI response for structured data...');
   // Enhanced parsing for better AI response extraction
   const lines = aiResponse.split('\n').filter(line => line.trim());
   
@@ -300,9 +310,13 @@ function parseAIResponse(aiResponse: string, elements: any) {
   
   // Generate contextual suggestions if none were parsed properly
   if (editingSuggestions.length < 5) {
+    console.log('⚠️ AI parsing incomplete, using fallback suggestions...');
     const fallbackSuggestions = generateFallbackSuggestions(elements);
     editingSuggestions.push(...fallbackSuggestions.slice(editingSuggestions.length));
   }
+  
+  console.log(`✅ Generated ${editingSuggestions.length} editing suggestions with real element IDs`);
+  editingSuggestions.forEach((s, i) => console.log(`  ${i+1}. ${s.type} (${s.elementId}) - ${s.description}`));
   
   return {
     insights: insights.slice(0, 5),
@@ -314,12 +328,21 @@ function parseAIResponse(aiResponse: string, elements: any) {
 }
 
 function generateFallbackSuggestions(elements: any) {
+  console.log('🎯 Generating context-aware fallback suggestions using real element IDs...');
+  
   // Use actual element IDs from the BPMN for context-aware suggestions
   const primaryTaskId = elements.userTasks.length > 0 ? elements.userTasks[0].id : 
                        elements.serviceTasks.length > 0 ? elements.serviceTasks[0].id : null;
   const primaryGatewayId = elements.exclusiveGateways.length > 0 ? elements.exclusiveGateways[0].id : 
                           elements.parallelGateways.length > 0 ? elements.parallelGateways[0].id : null;
   const primaryLaneId = elements.lanes.length > 0 ? elements.lanes[0].id : null;
+  
+  console.log('🔧 Key elements for suggestions:', {
+    primaryTaskId,
+    primaryGatewayId,
+    primaryLaneId,
+    totalElements: elements.allElements.length
+  });
   
   // Generate contextual suggestions based on actual diagram content
   const suggestions = [];

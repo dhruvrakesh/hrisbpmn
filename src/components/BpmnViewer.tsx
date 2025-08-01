@@ -256,7 +256,11 @@ const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave, suggestions
       return;
     }
 
-    console.log('Applying AI suggestion:', suggestion);
+    console.log('📝 Starting AI suggestion application:', {
+      type: suggestion.type,
+      elementId: suggestion.elementId,
+      description: suggestion.description
+    });
 
     // Show loading state
     toast({

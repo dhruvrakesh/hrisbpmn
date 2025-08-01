@@ -257,34 +257,44 @@ const Index = () => {
       return;
     }
 
+    console.log('🚀 Starting suggestion application from Results tab:', suggestion.id);
+
     try {
-      // Dispatch custom event to BpmnViewer for cross-component communication
-      const event = new CustomEvent('applySuggestion', { detail: suggestion });
-      window.dispatchEvent(event);
-
-      // Remove the applied suggestion from analysis results to prevent re-application
-      if (analysisResult?.processIntelligence?.editingSuggestions) {
-        const updatedSuggestions = analysisResult.processIntelligence.editingSuggestions.filter(
-          (s: any) => s.id !== suggestion.id
-        );
-        setAnalysisResult({
-          ...analysisResult,
-          processIntelligence: {
-            ...analysisResult.processIntelligence,
-            editingSuggestions: updatedSuggestions
-          }
-        });
-      }
-
-      // Switch to upload tab to show the changes immediately
-      setActiveTab("upload");
-      
+      // Show loading state
       toast({
         title: "Processing Suggestion",
         description: "Applying changes to your diagram...",
       });
+
+      // Dispatch custom event to BpmnViewer for cross-component communication
+      const event = new CustomEvent('applySuggestion', { detail: suggestion });
+      window.dispatchEvent(event);
+
+      // Wait a moment for the event to process
+      setTimeout(() => {
+        // Remove the applied suggestion from analysis results to prevent re-application
+        if (analysisResult?.processIntelligence?.editingSuggestions) {
+          const updatedSuggestions = analysisResult.processIntelligence.editingSuggestions.filter(
+            (s: any) => s.id !== suggestion.id
+          );
+          
+          console.log(`📝 Removing applied suggestion ${suggestion.id}, ${updatedSuggestions.length} remaining`);
+          
+          setAnalysisResult({
+            ...analysisResult,
+            processIntelligence: {
+              ...analysisResult.processIntelligence,
+              editingSuggestions: updatedSuggestions
+            }
+          });
+        }
+
+        // Switch to upload tab to show the changes immediately
+        setActiveTab("upload");
+      }, 1000);
+
     } catch (error: any) {
-      console.error('Error applying suggestion:', error);
+      console.error('❌ Error in suggestion handler:', error);
       toast({
         title: "Error",
         description: error.message || "Failed to apply AI suggestion.",
