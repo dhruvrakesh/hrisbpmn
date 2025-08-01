@@ -230,7 +230,7 @@ Also provide insights and recommendations for process optimization.`;
 
 function parseAIResponse(aiResponse: string, elements: any) {
   console.log('🔄 Parsing AI response for structured data...');
-  // Enhanced parsing for better AI response extraction
+// Enhanced parsing with validation for better AI response extraction
   const lines = aiResponse.split('\n').filter(line => line.trim());
   
   // Extract numbered lists and bullet points
@@ -242,6 +242,8 @@ function parseAIResponse(aiResponse: string, elements: any) {
   let currentSuggestion = null;
   let isInSuggestionsSection = false;
   
+  console.log('🔍 Parsing AI response for structured suggestions...');
+  
   for (const line of lines) {
     const cleanLine = line.trim();
     
@@ -251,26 +253,46 @@ function parseAIResponse(aiResponse: string, elements: any) {
       continue;
     }
     
-    // Parse editing suggestions
+    // Parse editing suggestions with validation
     if (isInSuggestionsSection) {
       if (cleanLine.startsWith('TYPE:')) {
         if (currentSuggestion) {
-          editingSuggestions.push(currentSuggestion);
+          // Validate previous suggestion before adding
+          if (currentSuggestion.type && currentSuggestion.description) {
+            editingSuggestions.push(currentSuggestion);
+          }
         }
-        currentSuggestion = {
-          id: `suggestion_${editingSuggestions.length + 1}`,
-          type: cleanLine.replace('TYPE:', '').trim().toLowerCase(),
-          elementId: null,
-          description: '',
-          details: {}
-        };
+        const suggestionType = cleanLine.replace('TYPE:', '').trim().toLowerCase();
+        // Validate suggestion type
+        const validTypes = ['add-task', 'add-gateway', 'change-gateway', 'optimize-flow', 'add-role'];
+        if (validTypes.includes(suggestionType)) {
+          currentSuggestion = {
+            id: `suggestion_${editingSuggestions.length + 1}`,
+            type: suggestionType,
+            elementId: null,
+            description: '',
+            details: {}
+          };
+        }
       } else if (cleanLine.startsWith('ELEMENT_ID:') && currentSuggestion) {
         const elementId = cleanLine.replace('ELEMENT_ID:', '').trim();
-        currentSuggestion.elementId = elementId !== 'null' ? elementId : null;
+        // Validate element ID exists in actual elements
+        if (elementId !== 'null' && elements.allElements.includes(elementId)) {
+          currentSuggestion.elementId = elementId;
+          console.log(`✅ Valid element ID found: ${elementId}`);
+        } else if (elementId !== 'null') {
+          console.log(`⚠️ Element ID ${elementId} not found in diagram, using null`);
+          currentSuggestion.elementId = null;
+        }
       } else if (cleanLine.startsWith('DESCRIPTION:') && currentSuggestion) {
         currentSuggestion.description = cleanLine.replace('DESCRIPTION:', '').trim();
       } else if (cleanLine.startsWith('IMPLEMENTATION:') && currentSuggestion) {
-        currentSuggestion.details = { implementation: cleanLine.replace('IMPLEMENTATION:', '').trim() };
+        const implementation = cleanLine.replace('IMPLEMENTATION:', '').trim();
+        currentSuggestion.details = { 
+          implementation,
+          // Add contextual details based on suggestion type
+          ...getSuggestionTypeDetails(currentSuggestion.type, currentSuggestion.elementId, elements)
+        };
       }
     }
     
@@ -286,8 +308,8 @@ function parseAIResponse(aiResponse: string, elements: any) {
     }
   }
   
-  // Add the last suggestion if exists
-  if (currentSuggestion && isInSuggestionsSection) {
+  // Add the last suggestion if exists and is valid
+  if (currentSuggestion && isInSuggestionsSection && currentSuggestion.type && currentSuggestion.description) {
     editingSuggestions.push(currentSuggestion);
   }
   
@@ -451,6 +473,32 @@ function generateFallbackSuggestions(elements: any) {
   }
   
   return suggestions;
+}
+
+// Helper function to get contextual details based on suggestion type
+function getSuggestionTypeDetails(type: string, elementId: string | null, elements: any) {
+  switch (type) {
+    case 'add-task':
+      return {
+        name: 'Process Task',
+        taskType: 'userTask'
+      };
+    case 'add-gateway':
+      return {
+        gatewayType: 'exclusive',
+        name: 'Decision Point'
+      };
+    case 'change-gateway':
+      return {
+        gatewayType: 'bpmn:ParallelGateway'
+      };
+    case 'add-role':
+      return {
+        roleName: 'Process Owner'
+      };
+    default:
+      return {};
+  }
 }
 
 function generateFallbackInsights(elements: any, complexity: any, roles: any) {

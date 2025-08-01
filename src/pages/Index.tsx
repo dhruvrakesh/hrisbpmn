@@ -70,6 +70,7 @@ const Index = () => {
   const [activeTab, setActiveTab] = useState("upload");
   const [bpmnViewerRef, setBpmnViewerRef] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [appliedSuggestions, setAppliedSuggestions] = useState<Set<string>>(new Set());
 
   // Check admin status
   useEffect(() => {
@@ -257,9 +258,22 @@ const Index = () => {
       return;
     }
 
+    // Check if suggestion was already applied
+    if (appliedSuggestions.has(suggestion.id)) {
+      toast({
+        title: "Already Applied",
+        description: "This suggestion has already been applied to the diagram.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     console.log('🚀 Starting suggestion application from Results tab:', suggestion.id);
 
     try {
+      // Mark suggestion as being applied
+      setAppliedSuggestions(prev => new Set([...prev, suggestion.id]));
+
       // Show loading state
       toast({
         title: "Processing Suggestion",
@@ -270,31 +284,41 @@ const Index = () => {
       const event = new CustomEvent('applySuggestion', { detail: suggestion });
       window.dispatchEvent(event);
 
-      // Wait a moment for the event to process
-      setTimeout(() => {
-        // Remove the applied suggestion from analysis results to prevent re-application
-        if (analysisResult?.processIntelligence?.editingSuggestions) {
-          const updatedSuggestions = analysisResult.processIntelligence.editingSuggestions.filter(
-            (s: any) => s.id !== suggestion.id
-          );
-          
-          console.log(`📝 Removing applied suggestion ${suggestion.id}, ${updatedSuggestions.length} remaining`);
-          
-          setAnalysisResult({
-            ...analysisResult,
-            processIntelligence: {
-              ...analysisResult.processIntelligence,
-              editingSuggestions: updatedSuggestions
-            }
-          });
-        }
+      // Remove the applied suggestion from analysis results immediately
+      if (analysisResult?.processIntelligence?.editingSuggestions) {
+        const updatedSuggestions = analysisResult.processIntelligence.editingSuggestions.filter(
+          (s: any) => s.id !== suggestion.id
+        );
+        
+        console.log(`📝 Removing applied suggestion ${suggestion.id}, ${updatedSuggestions.length} remaining`);
+        
+        setAnalysisResult({
+          ...analysisResult,
+          processIntelligence: {
+            ...analysisResult.processIntelligence,
+            editingSuggestions: updatedSuggestions
+          }
+        });
+      }
 
-        // Switch to upload tab to show the changes immediately
+      // Switch to upload tab to show the changes after a brief delay
+      setTimeout(() => {
         setActiveTab("upload");
-      }, 1000);
+        toast({
+          title: "Suggestion Applied",
+          description: "Diagram has been updated. Check the Upload tab to see changes.",
+        });
+      }, 1500);
 
     } catch (error: any) {
       console.error('❌ Error in suggestion handler:', error);
+      // Remove from applied suggestions if failed
+      setAppliedSuggestions(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(suggestion.id);
+        return newSet;
+      });
+      
       toast({
         title: "Error",
         description: error.message || "Failed to apply AI suggestion.",
