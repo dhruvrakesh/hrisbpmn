@@ -33,6 +33,9 @@ const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave, suggestions
   const [loading, setLoading] = useState(true);
   const [hasChanges, setHasChanges] = useState(false);
   const [currentBpmnXml, setCurrentBpmnXml] = useState<string>('');
+  const [appliedSuggestions, setAppliedSuggestions] = useState<Set<string>>(new Set());
+  const [cooldownUntil, setCooldownUntil] = useState(0);
+  const [isOperationInProgress, setIsOperationInProgress] = useState(false);
   const { toast } = useToast();
 
   const getCurrentBpmnXml = async (): Promise<string> => {
@@ -246,6 +249,39 @@ const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave, suggestions
   };
 
   const applySuggestion = async (suggestion: AIEditingSuggestion) => {
+    // Prevent duplicate applications
+    if (appliedSuggestions.has(suggestion.id)) {
+      console.log('⚠️ Suggestion already applied:', suggestion.id);
+      toast({
+        title: "Already Applied",
+        description: "This suggestion has already been applied.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Check cooldown period
+    const now = Date.now();
+    if (now < cooldownUntil) {
+      const remainingSeconds = Math.ceil((cooldownUntil - now) / 1000);
+      toast({
+        title: "Please Wait",
+        description: `Please wait ${remainingSeconds} seconds before applying another suggestion.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Check if operation already in progress
+    if (isOperationInProgress) {
+      toast({
+        title: "Operation in Progress",
+        description: "Please wait for the current operation to complete.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (!bpmnModelerRef.current) {
       console.error('❌ BPMN modeler not initialized');
       toast({
@@ -262,6 +298,15 @@ const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave, suggestions
       description: suggestion.description,
       hasDetails: !!suggestion.details
     });
+
+    // Set operation in progress
+    setIsOperationInProgress(true);
+    
+    // Add to applied suggestions immediately to prevent duplicates
+    setAppliedSuggestions(prev => new Set([...prev, suggestion.id]));
+    
+    // Set cooldown (3 seconds)
+    setCooldownUntil(now + 3000);
 
     // Show loading state
     toast({
@@ -521,11 +566,22 @@ const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave, suggestions
       
     } catch (error: any) {
       console.error('❌ Failed to apply AI suggestion:', error);
+      
+      // Remove from applied suggestions on failure to allow retry
+      setAppliedSuggestions(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(suggestion.id);
+        return newSet;
+      });
+      
       toast({
         title: "Failed to Apply Suggestion",
         description: error.message || "An unexpected error occurred while applying the suggestion.",
         variant: "destructive",
       });
+    } finally {
+      // Always reset operation in progress state
+      setIsOperationInProgress(false);
     }
   };
 

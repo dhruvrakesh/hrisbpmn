@@ -364,6 +364,47 @@ export type Database = {
           },
         ]
       }
+      bpmn_analysis_results: {
+        Row: {
+          ai_insights: Json | null
+          analysis_data: Json
+          created_at: string
+          file_id: string
+          findings: Json | null
+          id: string
+          summary: Json | null
+          updated_at: string
+        }
+        Insert: {
+          ai_insights?: Json | null
+          analysis_data: Json
+          created_at?: string
+          file_id: string
+          findings?: Json | null
+          id?: string
+          summary?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          ai_insights?: Json | null
+          analysis_data?: Json
+          created_at?: string
+          file_id?: string
+          findings?: Json | null
+          id?: string
+          summary?: Json | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bpmn_analysis_results_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "bpmn_files"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bpmn_audit_trail: {
         Row: {
           action_details: Json
@@ -8112,6 +8153,10 @@ export type Database = {
           size_mm?: string
           gsm?: number
         }
+        Returns: string
+      }
+      dkegl_generate_po_number: {
+        Args: { _org_id: string }
         Returns: string
       }
       dkegl_generate_vendor_code: {
