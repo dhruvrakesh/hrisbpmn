@@ -113,9 +113,11 @@ export const ProcessHistory = ({ onFileSelect, currentFileId }: ProcessHistoryPr
         return;
       }
 
-      // Fix each file
+  // Fix each file
       for (const file of filesWithoutVersions) {
         try {
+          console.log('Fixing file:', file.file_name, 'ID:', file.id);
+          
           // Download the file content
           const { data: fileBlob, error: downloadError } = await supabase.storage
             .from('bpmn-files')
@@ -124,10 +126,13 @@ export const ProcessHistory = ({ onFileSelect, currentFileId }: ProcessHistoryPr
           let fileContent = 'Original BPMN content not available';
           if (!downloadError && fileBlob) {
             fileContent = await fileBlob.text();
+            console.log('Downloaded file content length:', fileContent.length);
+          } else {
+            console.error('Download error:', downloadError);
           }
 
           // Create initial version
-          await supabase
+          const { error: versionError } = await supabase
             .from('bpmn_versions')
             .insert({
               bpmn_file_id: file.id,
@@ -138,8 +143,13 @@ export const ProcessHistory = ({ onFileSelect, currentFileId }: ProcessHistoryPr
               change_summary: 'Initial upload - retroactively created',
             });
 
+          if (versionError) {
+            console.error('Version creation error:', versionError);
+            throw versionError;
+          }
+
           // Create audit trail entry
-          await supabase
+          const { error: auditError } = await supabase
             .from('bpmn_audit_trail')
             .insert({
               bpmn_file_id: file.id,
