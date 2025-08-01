@@ -35,14 +35,17 @@ async function performEnhancedBPMNAnalysis(bpmnXml: string, fileId: string, file
       totalServiceTasks: elements.serviceTasks.length,
       totalGateways: elements.gateways.length,
       totalEvents: elements.events.length,
-      complexityScore: complexityAnalysis.overallScore,
+      processComplexity: complexityAnalysis.overallScore,
       riskLevel: complexityAnalysis.riskLevel,
       tasksFound: elements.userTasks.map(task => ({ id: task.id, name: task.name }))
     },
     processIntelligence: {
+      insights: aiInsights.insights || [],
+      recommendations: aiInsights.recommendations || [],
+      riskAssessment: `Implementation readiness: ${aiInsights.implementationReadiness || 5}/10. ${aiInsights.risks?.[0] || 'Standard process risk profile.'}`,
+      complianceNotes: aiInsights.risks || [],
       complexity: complexityAnalysis,
       roleDistribution: roleAnalysis,
-      aiInsights: aiInsights,
       stakeholderViews: stakeholderDocs
     },
     findings: generateEnhancedFindings(elements, complexityAnalysis, roleAnalysis, aiInsights)
@@ -187,14 +190,49 @@ Focus on HRIS best practices, compliance, and stakeholder experience.`;
 }
 
 function parseAIResponse(aiResponse: string) {
-  // Simple parsing - in production, you'd want more sophisticated parsing
+  // Enhanced parsing for better AI response extraction
   const lines = aiResponse.split('\n').filter(line => line.trim());
   
+  // Extract numbered lists and bullet points
+  const insights = [];
+  const recommendations = [];
+  const risks = [];
+  
+  for (const line of lines) {
+    const cleanLine = line.trim();
+    if (cleanLine.match(/^\d+\.|^[-•*]/)) {
+      if (cleanLine.toLowerCase().includes('insight') || cleanLine.toLowerCase().includes('finding')) {
+        insights.push(cleanLine.replace(/^\d+\.|^[-•*]\s*/, ''));
+      } else if (cleanLine.toLowerCase().includes('recommend') || cleanLine.toLowerCase().includes('improve')) {
+        recommendations.push(cleanLine.replace(/^\d+\.|^[-•*]\s*/, ''));
+      } else if (cleanLine.toLowerCase().includes('risk') || cleanLine.toLowerCase().includes('concern')) {
+        risks.push(cleanLine.replace(/^\d+\.|^[-•*]\s*/, ''));
+      }
+    }
+  }
+  
+  // Fallback to basic extraction if structured parsing fails
+  if (insights.length === 0) {
+    insights.push(...lines.filter(line => 
+      line.toLowerCase().includes('process') || 
+      line.toLowerCase().includes('workflow') ||
+      line.toLowerCase().includes('efficiency')
+    ).slice(0, 3));
+  }
+  
+  if (recommendations.length === 0) {
+    recommendations.push(...lines.filter(line => 
+      line.toLowerCase().includes('should') || 
+      line.toLowerCase().includes('consider') ||
+      line.toLowerCase().includes('optimize')
+    ).slice(0, 3));
+  }
+  
   return {
-    insights: lines.filter(line => line.includes('insight') || line.includes('•')).slice(0, 5),
-    recommendations: lines.filter(line => line.includes('recommend') || line.includes('-')).slice(0, 5),
+    insights: insights.slice(0, 5),
+    recommendations: recommendations.slice(0, 5),
     implementationReadiness: Math.floor(Math.random() * 3) + 7, // 7-10 range
-    risks: lines.filter(line => line.includes('risk') || line.includes('concern')).slice(0, 3)
+    risks: risks.length > 0 ? risks.slice(0, 3) : ['Standard implementation risks apply']
   };
 }
 
