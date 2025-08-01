@@ -781,8 +781,8 @@ const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave, suggestions
               <Zap className="h-4 w-4 mr-2" />
               AI Editing Suggestions ({suggestions.length} available)
             </h4>
-            <div className="space-y-3 max-h-48 overflow-y-auto">
-              {suggestions.map((suggestion) => (
+            <div className="space-y-3">
+              {suggestions.map((suggestion, index) => (
                 <div key={suggestion.id} className="flex items-start justify-between p-3 bg-white dark:bg-gray-800/50 rounded border shadow-sm">
                   <div className="flex-1">
                     <div className="flex items-center space-x-2 mb-1">
@@ -806,7 +806,9 @@ const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave, suggestions
                     size="sm" 
                     onClick={() => applySuggestion(suggestion)}
                     className="ml-3 bg-emerald-600 hover:bg-emerald-700 text-white"
+                    disabled={!bpmnModelerRef.current}
                   >
+                    <Play className="h-3 w-3 mr-1" />
                     Apply
                   </Button>
                 </div>
