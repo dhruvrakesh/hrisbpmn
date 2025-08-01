@@ -63,12 +63,20 @@ const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave, suggestions
       setHasChanges(true);
     });
 
+    // Listen for external applySuggestion events
+    const handleApplySuggestionEvent = (event: CustomEvent) => {
+      applySuggestion(event.detail);
+    };
+    
+    window.addEventListener('applySuggestion', handleApplySuggestionEvent as EventListener);
+
     loadBpmnFile();
 
     return () => {
       if (bpmnModelerRef.current) {
         bpmnModelerRef.current.destroy();
       }
+      window.removeEventListener('applySuggestion', handleApplySuggestionEvent as EventListener);
     };
   }, [filePath]);
 
@@ -403,7 +411,33 @@ const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave, suggestions
         }
       } catch (bpmnError) {
         console.error('BPMN operation failed:', bpmnError);
-        throw new Error(`BPMN operation failed: ${bpmnError.message}`);
+        // Retry once for keyboard binding issues
+        if (bpmnError.message?.includes('keyboard') && !operationSuccess) {
+          console.log('Retrying BPMN operation after keyboard error...');
+          try {
+            // Simple retry without keyboard dependency
+            switch (suggestion.type) {
+              case 'add-task':
+                const taskBusinessObject2 = bpmnFactory.create('bpmn:Task', {
+                  id: 'Task_' + Math.random().toString(36).substr(2, 9),
+                  name: suggestion.details?.name || 'New Task'
+                });
+                const taskElement2 = elementFactory.createShape({ 
+                  type: 'bpmn:Task',
+                  businessObject: taskBusinessObject2
+                });
+                const createdShape2 = modeling.createShape(taskElement2, { x: centerX, y: centerY }, canvas.getRootElement());
+                if (createdShape2) operationSuccess = true;
+                break;
+            }
+          } catch (retryError) {
+            console.error('Retry failed:', retryError);
+          }
+        }
+        
+        if (!operationSuccess) {
+          throw new Error(`BPMN operation failed: ${bpmnError.message}`);
+        }
       }
 
       if (!operationSuccess) {
@@ -451,7 +485,7 @@ const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave, suggestions
           .insert({
             bpmn_file_id: fileId,
             version_number: nextVersion,
-            version_type: 'ai_suggestion',
+            version_type: 'ai_revised',
             bpmn_xml: xml,
             created_by: user.id,
             change_summary: `AI suggestion applied: ${suggestion.description}`,

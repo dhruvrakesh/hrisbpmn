@@ -248,24 +248,55 @@ const Index = () => {
   };
 
   const handleApplySuggestion = async (suggestion: any) => {
-    // Remove the applied suggestion from analysis results
-    if (analysisResult?.processIntelligence?.editingSuggestions) {
-      const updatedSuggestions = analysisResult.processIntelligence.editingSuggestions.filter(
-        (s: any) => s.id !== suggestion.id
-      );
-      setAnalysisResult({
-        ...analysisResult,
-        processIntelligence: {
-          ...analysisResult.processIntelligence,
-          editingSuggestions: updatedSuggestions
-        }
+    if (!uploadedFile) {
+      toast({
+        title: "Error",
+        description: "No BPMN file is loaded. Please upload a file first.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // Get the BpmnViewer component ref
+      if (!bpmnViewerRef?.applySuggestion) {
+        // Call applySuggestion directly through the component instance
+        // Find the BpmnViewer component and call its applySuggestion method
+        const event = new CustomEvent('applySuggestion', { detail: suggestion });
+        window.dispatchEvent(event);
+      } else {
+        await bpmnViewerRef.applySuggestion(suggestion);
+      }
+
+      // Remove the applied suggestion from analysis results
+      if (analysisResult?.processIntelligence?.editingSuggestions) {
+        const updatedSuggestions = analysisResult.processIntelligence.editingSuggestions.filter(
+          (s: any) => s.id !== suggestion.id
+        );
+        setAnalysisResult({
+          ...analysisResult,
+          processIntelligence: {
+            ...analysisResult.processIntelligence,
+            editingSuggestions: updatedSuggestions
+          }
+        });
+      }
+
+      // Switch to upload tab to show the changes
+      setActiveTab("upload");
+      
+      toast({
+        title: "Suggestion Applied",
+        description: suggestion.description,
+      });
+    } catch (error: any) {
+      console.error('Error applying suggestion:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to apply AI suggestion.",
+        variant: "destructive",
       });
     }
-    
-    toast({
-      title: "Suggestion Applied",
-      description: suggestion.description,
-    });
   };
 
   return (
