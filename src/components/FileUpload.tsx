@@ -25,10 +25,10 @@ const FileUpload = ({ onFileUploaded }: FileUploadProps) => {
     if (!file || !user) return;
 
     // Validate file type
-    if (!file.name.endsWith('.bpmn') && !file.name.endsWith('.xml')) {
+    if (!file.name.endsWith('.bpmn') && !file.name.endsWith('.bpmn2') && !file.name.endsWith('.xml')) {
       toast({
         title: "Invalid File Type",
-        description: "Please upload a .bpmn or .xml file.",
+        description: "Please upload a .bpmn, .bpmn2, or .xml file.",
         variant: "destructive",
       });
       return;
@@ -96,7 +96,7 @@ const FileUpload = ({ onFileUploaded }: FileUploadProps) => {
           <span>Upload BPMN Process</span>
         </CardTitle>
         <CardDescription>
-          Upload your BPMN (.bpmn or .xml) file to start the analysis
+          Upload your BPMN (.bpmn, .bpmn2, or .xml) file to start the analysis
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -117,7 +117,7 @@ const FileUpload = ({ onFileUploaded }: FileUploadProps) => {
                 <FileText className="h-8 w-8 text-muted-foreground" />
                 <span>Click to upload BPMN file</span>
                 <span className="text-sm text-muted-foreground">
-                  Supports .bpmn and .xml files
+                  Supports .bpmn, .bpmn2, and .xml files
                 </span>
               </div>
             )}
@@ -126,7 +126,7 @@ const FileUpload = ({ onFileUploaded }: FileUploadProps) => {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".bpmn,.xml"
+            accept=".bpmn,.bpmn2,.xml"
             onChange={handleFileUpload}
             className="hidden"
           />
