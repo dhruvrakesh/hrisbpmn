@@ -238,7 +238,17 @@ const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave, suggestions
   };
 
   const applySuggestion = async (suggestion: AIEditingSuggestion) => {
-    if (!bpmnModelerRef.current) return;
+    if (!bpmnModelerRef.current) {
+      console.error('BPMN modeler not initialized');
+      toast({
+        title: "Error",
+        description: "BPMN editor is not ready. Please wait for the diagram to load.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    console.log('Applying AI suggestion:', suggestion);
 
     try {
       const modeler = bpmnModelerRef.current;
@@ -246,78 +256,158 @@ const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave, suggestions
       const elementFactory = modeler.get('elementFactory');
       const elementRegistry = modeler.get('elementRegistry');
       const canvas = modeler.get('canvas');
+      const bpmnFactory = modeler.get('bpmnFactory');
+
+      if (!modeling || !elementFactory || !elementRegistry || !canvas || !bpmnFactory) {
+        throw new Error('BPMN modeler services not available');
+      }
 
       // Get canvas dimensions for intelligent positioning
       const viewbox = canvas.viewbox();
       const centerX = viewbox.x + (viewbox.width / 2);
       const centerY = viewbox.y + (viewbox.height / 2);
 
-      switch (suggestion.type) {
-        case 'add-task':
-          // Create new task with intelligent positioning
-          const taskElement = elementFactory.createShape({ 
-            type: 'bpmn:Task',
-            businessObject: modeler.get('bpmnFactory').create('bpmn:Task', {
+      let operationSuccess = false;
+
+      try {
+        switch (suggestion.type) {
+          case 'add-task':
+            console.log('Creating new task element');
+            
+            // Ensure we have a valid parent container
+            const rootElement = canvas.getRootElement();
+            if (!rootElement) {
+              throw new Error('No root element found in BPMN diagram');
+            }
+
+            // Create business object first
+            const taskBusinessObject = bpmnFactory.create('bpmn:Task', {
+              id: 'Task_' + Math.random().toString(36).substr(2, 9),
               name: suggestion.details?.name || 'New Task'
-            })
-          });
-          
-          // Position near the specified element or at center
-          let position = { x: centerX, y: centerY };
-          if (suggestion.elementId) {
-            const targetElement = elementRegistry.get(suggestion.elementId);
-            if (targetElement) {
-              position = {
-                x: targetElement.x + 150,
-                y: targetElement.y
-              };
-            }
-          }
-          
-          modeling.createShape(taskElement, position, canvas.getRootElement());
-          break;
-
-        case 'change-gateway':
-          if (suggestion.elementId) {
-            const element = elementRegistry.get(suggestion.elementId);
-            if (element && element.type.includes('Gateway')) {
-              const newGatewayType = suggestion.details?.gatewayType || 'bpmn:ExclusiveGateway';
-              const newGateway = elementFactory.createShape({ type: newGatewayType });
-              modeling.replaceShape(element, newGateway);
-            }
-          }
-          break;
-
-        case 'optimize-flow':
-          // Remove unnecessary intermediate events or simplify paths
-          if (suggestion.details?.removeElements) {
-            suggestion.details.removeElements.forEach((elementId: string) => {
-              const element = elementRegistry.get(elementId);
-              if (element) {
-                modeling.removeShape(element);
-              }
             });
-          }
-          break;
 
-        case 'add-role':
-          // Add a new lane with role assignment
-          const laneElement = elementFactory.createShape({ 
-            type: 'bpmn:Lane',
-            businessObject: modeler.get('bpmnFactory').create('bpmn:Lane', {
+            // Create task element
+            const taskElement = elementFactory.createShape({ 
+              type: 'bpmn:Task',
+              businessObject: taskBusinessObject
+            });
+            
+            if (!taskElement) {
+              throw new Error('Failed to create task element');
+            }
+            
+            // Position near the specified element or at center
+            let position = { x: centerX, y: centerY };
+            if (suggestion.elementId) {
+              const targetElement = elementRegistry.get(suggestion.elementId);
+              if (targetElement && targetElement.x !== undefined && targetElement.y !== undefined) {
+                position = {
+                  x: targetElement.x + 150,
+                  y: targetElement.y
+                };
+              }
+            }
+            
+            console.log('Creating shape at position:', position);
+            const createdShape = modeling.createShape(taskElement, position, rootElement);
+            if (createdShape) {
+              operationSuccess = true;
+              console.log('Task created successfully:', createdShape.id);
+            }
+            break;
+
+          case 'change-gateway':
+            if (!suggestion.elementId) {
+              throw new Error('No element ID specified for gateway change');
+            }
+            
+            const element = elementRegistry.get(suggestion.elementId);
+            if (!element) {
+              throw new Error(`Element not found: ${suggestion.elementId}`);
+            }
+            
+            if (!element.type.includes('Gateway')) {
+              throw new Error(`Element ${suggestion.elementId} is not a gateway`);
+            }
+            
+            const newGatewayType = suggestion.details?.gatewayType || 'bpmn:ExclusiveGateway';
+            const gatewayBusinessObject = bpmnFactory.create(newGatewayType, {
+              id: element.businessObject.id + '_new'
+            });
+            
+            const newGateway = elementFactory.createShape({ 
+              type: newGatewayType,
+              businessObject: gatewayBusinessObject
+            });
+            
+            const replacedElement = modeling.replaceShape(element, newGateway);
+            if (replacedElement) {
+              operationSuccess = true;
+              console.log('Gateway replaced successfully');
+            }
+            break;
+
+          case 'optimize-flow':
+            if (suggestion.details?.removeElements && Array.isArray(suggestion.details.removeElements)) {
+              let removedCount = 0;
+              suggestion.details.removeElements.forEach((elementId: string) => {
+                try {
+                  const element = elementRegistry.get(elementId);
+                  if (element) {
+                    modeling.removeShape(element);
+                    removedCount++;
+                  }
+                } catch (removeError) {
+                  console.warn(`Failed to remove element ${elementId}:`, removeError);
+                }
+              });
+              
+              if (removedCount > 0) {
+                operationSuccess = true;
+                console.log(`Removed ${removedCount} elements for flow optimization`);
+              }
+            }
+            break;
+
+          case 'add-role':
+            console.log('Creating new lane/role');
+            
+            // Create lane business object
+            const laneBusinessObject = bpmnFactory.create('bpmn:Lane', {
+              id: 'Lane_' + Math.random().toString(36).substr(2, 9),
               name: suggestion.details?.roleName || 'New Role'
-            })
-          });
-          
-          // Try to add to existing participant or create new one
-          const participants = elementRegistry.filter(element => element.type === 'bpmn:Participant');
-          if (participants.length > 0) {
-            modeling.createShape(laneElement, { x: 0, y: 0 }, participants[0]);
-          }
-          break;
+            });
 
-        default:
-          console.warn('Unknown suggestion type:', suggestion.type);
+            const laneElement = elementFactory.createShape({ 
+              type: 'bpmn:Lane',
+              businessObject: laneBusinessObject
+            });
+            
+            // Try to add to existing participant or create new one
+            const participants = elementRegistry.filter(element => element.type === 'bpmn:Participant');
+            let targetParent = canvas.getRootElement();
+            
+            if (participants.length > 0) {
+              targetParent = participants[0];
+            }
+            
+            const createdLane = modeling.createShape(laneElement, { x: 50, y: 50 }, targetParent);
+            if (createdLane) {
+              operationSuccess = true;
+              console.log('Lane/role created successfully');
+            }
+            break;
+
+          default:
+            throw new Error(`Unknown suggestion type: ${suggestion.type}`);
+        }
+      } catch (bpmnError) {
+        console.error('BPMN operation failed:', bpmnError);
+        throw new Error(`BPMN operation failed: ${bpmnError.message}`);
+      }
+
+      if (!operationSuccess) {
+        throw new Error('Operation completed but no changes were detected');
       }
       
       // Mark as having changes
@@ -383,13 +473,38 @@ const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave, suggestions
 
       // Notify parent component
       onSuggestionApplied?.(suggestion);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error applying suggestion:', error);
+      
+      // Provide specific error messages based on error type
+      let errorMessage = "Failed to apply suggestion.";
+      
+      if (error.message?.includes('Cannot read properties of undefined')) {
+        errorMessage = "BPMN structure issue detected. The diagram may need to be refreshed or the operation is not compatible with this diagram structure.";
+      } else if (error.message?.includes('Element not found')) {
+        errorMessage = "The target element for this suggestion no longer exists in the diagram.";
+      } else if (error.message?.includes('not available')) {
+        errorMessage = "BPMN editor is not fully loaded. Please wait a moment and try again.";
+      } else if (error.message?.includes('No root element')) {
+        errorMessage = "Diagram structure is invalid. Try reloading the file.";
+      } else if (error.message) {
+        errorMessage = `Operation failed: ${error.message}`;
+      }
+
       toast({
-        title: "Error",
-        description: "Failed to apply suggestion. The element might not exist or the operation is not valid.",
+        title: "AI Suggestion Failed",
+        description: errorMessage,
         variant: "destructive",
       });
+
+      // Try to recover by refreshing the modeler state
+      try {
+        console.log('Attempting to recover BPMN modeler state...');
+        const canvas = bpmnModelerRef.current?.get('canvas');
+        canvas?.zoom('fit-viewport');
+      } catch (recoveryError) {
+        console.warn('Recovery attempt failed:', recoveryError);
+      }
     }
   };
 
