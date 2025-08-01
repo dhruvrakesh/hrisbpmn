@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import Header from '@/components/layout/Header';
@@ -63,6 +63,7 @@ interface AnalysisResult {
 const Index = () => {
   const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
+  const location = useLocation();
   const [uploadedFile, setUploadedFile] = useState<FileData | null>(null);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
@@ -79,6 +80,48 @@ const Index = () => {
     };
     if (user) checkAdminStatus();
   }, [user]);
+
+  // Handle navigation from AdminDashboard
+  useEffect(() => {
+    const handleAdminNavigation = async () => {
+      const state = location.state as { selectedFileId?: string };
+      if (state?.selectedFileId && user) {
+        try {
+          const { data: file, error } = await supabase
+            .from('bpmn_files')
+            .select('*')
+            .eq('id', state.selectedFileId)
+            .single();
+
+          if (error) throw error;
+
+          setUploadedFile({
+            id: file.id,
+            fileName: file.file_name,
+            filePath: file.file_path,
+          });
+          setActiveTab("upload");
+          setAnalysisResult(null);
+          
+          toast({
+            title: "File Loaded",
+            description: `Opened ${file.file_name} from admin dashboard`,
+          });
+        } catch (error: any) {
+          console.error('Error loading file from admin:', error);
+          toast({
+            title: "Load Error",
+            description: "Failed to load file from admin dashboard.",
+            variant: "destructive",
+          });
+        }
+      }
+    };
+
+    if (user && location.state) {
+      handleAdminNavigation();
+    }
+  }, [user, location.state]);
 
   // Redirect to auth if not authenticated
   if (!authLoading && !user) {

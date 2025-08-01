@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { useNavigate } from 'react-router-dom';
 import { 
   Shield, 
   FileText, 
@@ -61,6 +62,7 @@ const AdminDashboard = () => {
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   useEffect(() => {
     loadAdminData();
@@ -238,6 +240,43 @@ const AdminDashboard = () => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
+  const handleViewDetails = (file: FileWithVersions) => {
+    // Navigate to main dashboard with the selected file
+    navigate('/', { state: { selectedFileId: file.id } });
+  };
+
+  const handleDownloadFile = async (file: FileWithVersions) => {
+    try {
+      const { data, error } = await supabase.storage
+        .from('bpmn-files')
+        .download(file.file_path);
+
+      if (error) throw error;
+
+      const blob = new Blob([data], { type: 'application/xml' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = file.file_name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast({
+        title: "Download Complete",
+        description: `${file.file_name} has been downloaded.`,
+      });
+    } catch (error: any) {
+      console.error('Error downloading file:', error);
+      toast({
+        title: "Download Error",
+        description: "Failed to download the file.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const getActionIcon = (actionType: string) => {
     switch (actionType) {
       case 'upload': return <FileText className="h-4 w-4" />;
@@ -408,7 +447,7 @@ const AdminDashboard = () => {
                           <div className="flex items-center space-x-2">
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <Button size="sm" variant="outline">
+                                <Button size="sm" variant="outline" onClick={() => handleViewDetails(file)}>
                                   <Eye className="h-3 w-3" />
                                 </Button>
                               </TooltipTrigger>
@@ -416,7 +455,7 @@ const AdminDashboard = () => {
                             </Tooltip>
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <Button size="sm" variant="outline">
+                                <Button size="sm" variant="outline" onClick={() => handleDownloadFile(file)}>
                                   <Download className="h-3 w-3" />
                                 </Button>
                               </TooltipTrigger>
