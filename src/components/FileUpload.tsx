@@ -68,15 +68,35 @@ const FileUpload = ({ onFileUploaded }: FileUploadProps) => {
         throw dbError;
       }
 
-      // Update the initial version with the actual BPMN XML content
+      // Create initial version and audit trail entry
       try {
+        // Create initial version
         await supabase
           .from('bpmn_versions')
-          .update({ bpmn_xml: fileContent })
-          .eq('bpmn_file_id', data.id)
-          .eq('version_number', 1);
+          .insert({
+            bpmn_file_id: data.id,
+            version_number: 1,
+            version_type: 'original',
+            bpmn_xml: fileContent,
+            created_by: user.id,
+            change_summary: 'Initial upload',
+          });
+
+        // Create audit trail entry
+        await supabase
+          .from('bpmn_audit_trail')
+          .insert({
+            bpmn_file_id: data.id,
+            action_type: 'upload',
+            user_id: user.id,
+            action_details: { 
+              file_name: file.name, 
+              file_size: file.size,
+              version_created: 1
+            }
+          });
       } catch (versionError) {
-        console.warn('Failed to update initial version with XML content:', versionError);
+        console.warn('Failed to create initial version and audit:', versionError);
       }
 
       toast({

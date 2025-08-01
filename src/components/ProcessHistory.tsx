@@ -25,6 +25,7 @@ interface ProcessHistoryProps {
 export const ProcessHistory = ({ onFileSelect, currentFileId }: ProcessHistoryProps) => {
   const [files, setFiles] = useState<BpmnFile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fixingData, setFixingData] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -84,6 +85,95 @@ export const ProcessHistory = ({ onFileSelect, currentFileId }: ProcessHistoryPr
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
+  const fixMissingData = async () => {
+    try {
+      setFixingData(true);
+      
+      // Check for files without versions
+      const { data: filesWithoutVersions } = await supabase
+        .from('bpmn_files')
+        .select(`
+          id,
+          file_name,
+          file_path,
+          user_id,
+          file_size
+        `)
+        .not('id', 'in', 
+          '(SELECT DISTINCT bpmn_file_id FROM bpmn_versions)'
+        );
+      
+      if (!filesWithoutVersions || filesWithoutVersions.length === 0) {
+        toast({
+          title: "No Issues Found",
+          description: "All files have proper versions and audit trails.",
+        });
+        return;
+      }
+
+      // Fix each file
+      for (const file of filesWithoutVersions) {
+        try {
+          // Download the file content
+          const { data: fileBlob, error: downloadError } = await supabase.storage
+            .from('bpmn-files')
+            .download(file.file_path);
+
+          let fileContent = 'Original BPMN content not available';
+          if (!downloadError && fileBlob) {
+            fileContent = await fileBlob.text();
+          }
+
+          // Create initial version
+          await supabase
+            .from('bpmn_versions')
+            .insert({
+              bpmn_file_id: file.id,
+              version_number: 1,
+              version_type: 'original',
+              bpmn_xml: fileContent,
+              created_by: file.user_id,
+              change_summary: 'Initial upload - retroactively created',
+            });
+
+          // Create audit trail entry
+          await supabase
+            .from('bpmn_audit_trail')
+            .insert({
+              bpmn_file_id: file.id,
+              action_type: 'upload',
+              user_id: file.user_id,
+              action_details: { 
+                file_name: file.file_name, 
+                file_size: file.file_size,
+                version_created: 1,
+                retroactive_entry: true
+              }
+            });
+        } catch (fileError) {
+          console.error(`Error fixing file ${file.file_name}:`, fileError);
+        }
+      }
+
+      toast({
+        title: "Data Fixed Successfully",
+        description: `Fixed ${filesWithoutVersions.length} files. Refresh to see changes.`,
+      });
+      
+      // Reload files
+      loadFiles();
+    } catch (error: any) {
+      console.error('Error fixing missing data:', error);
+      toast({
+        title: "Fix Failed",
+        description: error.message || "Failed to fix missing data.",
+        variant: "destructive",
+      });
+    } finally {
+      setFixingData(false);
+    }
+  };
+
   if (loading) {
     return (
       <Card>
@@ -99,13 +189,31 @@ export const ProcessHistory = ({ onFileSelect, currentFileId }: ProcessHistoryPr
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            Process History
-          </CardTitle>
-          <CardDescription>
-            Your previously uploaded BPMN process files
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Process History
+              </CardTitle>
+              <CardDescription>
+                Your previously uploaded BPMN process files
+              </CardDescription>
+            </div>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={fixMissingData}
+              disabled={fixingData}
+              className="flex items-center gap-2"
+            >
+              {fixingData ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+              ) : (
+                <FileText className="h-4 w-4" />
+              )}
+              Fix Missing Data
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {files.length === 0 ? (

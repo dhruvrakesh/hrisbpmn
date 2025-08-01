@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
@@ -10,6 +10,7 @@ import AiChatInterface from '@/components/AiChatInterface';
 import UsageTracker from '@/components/UsageTracker';
 import { ProcessHistory } from '@/components/ProcessHistory';
 import TemplateManager from '@/components/TemplateManager';
+import AdminDashboard from '@/components/AdminDashboard';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
@@ -67,6 +68,17 @@ const Index = () => {
   const [analyzing, setAnalyzing] = useState(false);
   const [activeTab, setActiveTab] = useState("upload");
   const [bpmnViewerRef, setBpmnViewerRef] = useState<any>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  // Check admin status
+  useEffect(() => {
+    const checkAdminStatus = async () => {
+      if (user?.email === 'info@dkenterprises.co.in') {
+        setIsAdmin(true);
+      }
+    };
+    if (user) checkAdminStatus();
+  }, [user]);
 
   // Redirect to auth if not authenticated
   if (!authLoading && !user) {
@@ -228,11 +240,12 @@ const Index = () => {
           </div>
 
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className={`grid w-full ${isAdmin ? 'grid-cols-5' : 'grid-cols-4'}`}>
               <TabsTrigger value="upload">Upload & Analyze</TabsTrigger>
               <TabsTrigger value="results">Results</TabsTrigger>
               <TabsTrigger value="history">Process History</TabsTrigger>
               <TabsTrigger value="templates">Templates</TabsTrigger>
+              {isAdmin && <TabsTrigger value="admin">Admin</TabsTrigger>}
             </TabsList>
 
             <TabsContent value="upload" className="space-y-6">
@@ -284,6 +297,12 @@ const Index = () => {
                 currentTemplateId={uploadedFile?.id}
               />
             </TabsContent>
+
+            {isAdmin && (
+              <TabsContent value="admin" className="space-y-6">
+                <AdminDashboard />
+              </TabsContent>
+            )}
           </Tabs>
         </main>
 

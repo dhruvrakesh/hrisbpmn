@@ -138,15 +138,41 @@ const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave, suggestions
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
       
-      // Create new version in the audit trail
-      const { data: versionData, error: versionError } = await supabase.rpc('create_ai_revised_version', {
-        p_bpmn_file_id: fileId,
-        p_revised_xml: xml,
-        p_suggestions_applied: JSON.stringify([]),
-        p_change_summary: 'Manual edit - diagram updated'
-      });
+      // Get the next version number
+      const { data: maxVersion } = await supabase
+        .from('bpmn_versions')
+        .select('version_number')
+        .eq('bpmn_file_id', fileId)
+        .order('version_number', { ascending: false })
+        .limit(1)
+        .single();
 
-      if (versionError) throw versionError;
+      const nextVersion = (maxVersion?.version_number || 0) + 1;
+
+      // Create new version
+      await supabase
+        .from('bpmn_versions')
+        .insert({
+          bpmn_file_id: fileId,
+          version_number: nextVersion,
+          version_type: 'manual_edit',
+          bpmn_xml: xml,
+          created_by: user.id,
+          change_summary: 'Manual edit - diagram updated',
+        });
+
+      // Create audit trail entry
+      await supabase
+        .from('bpmn_audit_trail')
+        .insert({
+          bpmn_file_id: fileId,
+          action_type: 'manual_edit',
+          user_id: user.id,
+          action_details: { 
+            version_created: nextVersion,
+            change_summary: 'Manual edit - diagram updated'
+          }
+        });
 
       setHasChanges(false);
       onSave?.();
@@ -302,12 +328,49 @@ const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave, suggestions
         const result = await bpmnModelerRef.current.saveXML({ format: true });
         const { xml } = result;
         
-        await supabase.rpc('create_ai_revised_version', {
-          p_bpmn_file_id: fileId,
-          p_revised_xml: xml,
-          p_suggestions_applied: JSON.stringify([suggestion]),
-          p_change_summary: `AI suggestion applied: ${suggestion.description}`
-        });
+        // Get current user for AI suggestions
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        // Get the next version number
+        const { data: maxVersion } = await supabase
+          .from('bpmn_versions')
+          .select('version_number')
+          .eq('bpmn_file_id', fileId)
+          .order('version_number', { ascending: false })
+          .limit(1)
+          .single();
+
+        const nextVersion = (maxVersion?.version_number || 0) + 1;
+
+        // Create new version
+        await supabase
+          .from('bpmn_versions')
+          .insert({
+            bpmn_file_id: fileId,
+            version_number: nextVersion,
+            version_type: 'ai_suggestion',
+            bpmn_xml: xml,
+            created_by: user.id,
+            change_summary: `AI suggestion applied: ${suggestion.description}`,
+            ai_suggestions_applied: JSON.stringify([suggestion])
+          });
+
+        // Create audit trail entry
+        await supabase
+          .from('bpmn_audit_trail')
+          .insert({
+            bpmn_file_id: fileId,
+            action_type: 'ai_suggestion_applied',
+            user_id: user.id,
+            action_details: { 
+              version_created: nextVersion,
+              suggestion_id: suggestion.id,
+              suggestion_type: suggestion.type,
+              description: suggestion.description
+            },
+            ai_suggestion_data: JSON.stringify(suggestion)
+          });
       } catch (versionError) {
         console.error('Error saving AI version:', versionError);
         // Continue with the normal flow even if version saving fails
