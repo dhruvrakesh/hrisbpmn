@@ -82,11 +82,13 @@ const AdminDashboard = () => {
         f.uploaded_at.startsWith(today)
       ).length || 0;
 
-      const aiSuggestionsApplied = versionsResult.data?.filter(v => 
-        v.ai_suggestions_applied && 
-        Array.isArray(v.ai_suggestions_applied) && 
-        v.ai_suggestions_applied.length > 0
-      ).length || 0;
+      // Count AI suggestions from audit trail (more reliable)
+      const { data: aiTrailData } = await supabase
+        .from('bpmn_audit_trail')
+        .select('id')
+        .eq('action_type', 'ai_suggestion_applied');
+
+      const aiSuggestionsApplied = aiTrailData?.length || 0;
 
       const uniqueUsers = new Set(usersResult.data?.map(u => u.user_id)).size;
 
@@ -105,12 +107,42 @@ const AdminDashboard = () => {
         .order('uploaded_at', { ascending: false })
         .limit(20);
       
-      setFiles(basicFiles?.map(f => ({
-        ...f,
-        version_count: 1,
-        latest_version: 1,
-        has_ai_changes: false
-      })) || []);
+      // Enhanced file loading with proper AI changes detection
+      const filesWithVersions = await Promise.all(
+        (basicFiles || []).map(async (file) => {
+          // Get version count
+          const { count: versionCount } = await supabase
+            .from('bpmn_versions')
+            .select('*', { count: 'exact', head: true })
+            .eq('bpmn_file_id', file.id);
+
+          // Check for AI changes in audit trail
+          const { data: aiChanges } = await supabase
+            .from('bpmn_audit_trail')
+            .select('id')
+            .eq('bpmn_file_id', file.id)
+            .eq('action_type', 'ai_suggestion_applied')
+            .limit(1);
+
+          // Get latest version number
+          const { data: latestVersion } = await supabase
+            .from('bpmn_versions')
+            .select('version_number')
+            .eq('bpmn_file_id', file.id)
+            .order('version_number', { ascending: false })
+            .limit(1)
+            .single();
+
+          return {
+            ...file,
+            version_count: versionCount || 1,
+            latest_version: latestVersion?.version_number || 1,
+            has_ai_changes: (aiChanges?.length || 0) > 0
+          };
+        })
+      );
+      
+      setFiles(filesWithVersions);
 
       // Load recent activity
       const { data: activityData } = await supabase
