@@ -353,7 +353,7 @@ const AnalysisResults = ({ result, loading, onRefresh, onApplySuggestion }: Anal
                       size="sm" 
                       className="ml-4 flex-shrink-0"
                       onClick={() => onApplySuggestion(suggestion)}
-                      disabled={false} // Will be controlled by parent state
+                      disabled={false} // Note: Suggestion-level disabled state is now handled in BpmnViewer
                     >
                       <Play className="h-3 w-3 mr-1" />
                       Apply

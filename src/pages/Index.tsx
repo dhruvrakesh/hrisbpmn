@@ -70,7 +70,18 @@ const Index = () => {
   const [activeTab, setActiveTab] = useState("upload");
   const [bpmnViewerRef, setBpmnViewerRef] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [appliedSuggestions, setAppliedSuggestions] = useState<Set<string>>(new Set());
+  // Global applied suggestions tracking with localStorage persistence
+  const [appliedSuggestions, setAppliedSuggestions] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem('appliedSuggestions');
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+
+  // Global suggestion lock to prevent infinite loops  
+  const [globalSuggestionLock, setGlobalSuggestionLock] = useState<Set<string>>(new Set());
 
   // Check admin status
   useEffect(() => {
@@ -149,15 +160,26 @@ const Index = () => {
     setAnalysisResult(null);
 
     try {
+      // Send applied suggestions to prevent regeneration
+      const appliedSuggestionsArray = [...appliedSuggestions];
+      
       const { data, error } = await supabase.functions.invoke('analyze-bpmn', {
         body: {
           fileId: uploadedFile.id,
           filePath: uploadedFile.filePath,
+          appliedSuggestions: appliedSuggestionsArray, // Filter out already applied
         },
       });
 
       if (error) {
         throw error;
+      }
+
+      // Filter out any suggestions that are already applied (double safety)
+      if (data.aiSuggestions) {
+        data.aiSuggestions = data.aiSuggestions.filter(
+          (suggestion: any) => !appliedSuggestions.has(suggestion.id)
+        );
       }
 
       setAnalysisResult(data);
@@ -258,6 +280,17 @@ const Index = () => {
       return;
     }
 
+    // Check global suggestion lock first
+    if (globalSuggestionLock.has(suggestion.id)) {
+      console.log('🔒 Suggestion blocked by global lock:', suggestion.id);
+      toast({
+        title: "Already Applied",
+        description: `Suggestion "${suggestion.description}" has already been applied in this session.`,
+        variant: "default",
+      });
+      return;
+    }
+
     // Check if suggestion was already applied
     if (appliedSuggestions.has(suggestion.id)) {
       console.log('⚠️ Suggestion already applied:', suggestion.id);
@@ -271,8 +304,15 @@ const Index = () => {
 
     console.log('🚀 Starting suggestion application from Results tab:', suggestion.id);
 
+    // Add to global lock immediately
+    setGlobalSuggestionLock(prev => new Set([...prev, suggestion.id]));
+
     // Mark suggestion as being applied immediately to prevent duplicates
-    setAppliedSuggestions(prev => new Set([...prev, suggestion.id]));
+    setAppliedSuggestions(prev => {
+      const newSet = new Set([...prev, suggestion.id]);
+      localStorage.setItem('appliedSuggestions', JSON.stringify([...newSet]));
+      return newSet;
+    });
 
     // Remove from analysis results immediately to prevent re-application
     setAnalysisResult(prev => {
@@ -294,7 +334,36 @@ const Index = () => {
     // Forward to BPMN viewer via custom event
     const event = new CustomEvent('applySuggestion', { detail: suggestion });
     window.dispatchEvent(event);
-  }, [uploadedFile, appliedSuggestions, toast]);
+  }, [uploadedFile, appliedSuggestions, globalSuggestionLock, toast]);
+
+  const handleSuggestionApplied = useCallback((appliedSuggestion: any) => {
+    console.log('✅ Index - Suggestion applied, removing from results:', appliedSuggestion);
+    
+    // Remove from analysis results immediately
+    setAnalysisResult(prevResult => {
+      if (!prevResult?.processIntelligence?.editingSuggestions) return prevResult;
+      
+      return {
+        ...prevResult,
+        processIntelligence: {
+          ...prevResult.processIntelligence,
+          editingSuggestions: prevResult.processIntelligence.editingSuggestions.filter(
+            (s: any) => s.id !== appliedSuggestion.id
+          )
+        }
+      };
+    });
+    
+    // Ensure it's tracked as applied and persisted
+    setAppliedSuggestions(prev => {
+      const newSet = new Set([...prev, appliedSuggestion.id]);
+      localStorage.setItem('appliedSuggestions', JSON.stringify([...newSet]));
+      return newSet;
+    });
+    
+    // Keep in global lock permanently for this session
+    setGlobalSuggestionLock(prev => new Set([...prev, appliedSuggestion.id]));
+  }, []);
 
   return (
     <ErrorBoundary>
@@ -334,7 +403,7 @@ const Index = () => {
                     filePath={uploadedFile.filePath}
                     onAnalyze={runAnalysis}
                     suggestions={analysisResult?.processIntelligence?.editingSuggestions || []}
-                    onSuggestionApplied={handleApplySuggestion}
+                    onSuggestionApplied={handleSuggestionApplied}
                   />
                 )}
               </div>
