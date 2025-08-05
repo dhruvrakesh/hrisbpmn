@@ -60,16 +60,16 @@ function extractBPMNElements(bpmnXml: string) {
   console.log('🔍 Extracting BPMN elements from XML...');
   
   const elements = {
-    userTasks: extractElementsWithRegex(bpmnXml, /<bpmn:userTask[^>]*id="([^"]*)"(?:[^>]*name="([^"]*)")?[^>]*>/g),
-    serviceTasks: extractElementsWithRegex(bpmnXml, /<bpmn:serviceTask[^>]*id="([^"]*)"(?:[^>]*name="([^"]*)")?[^>]*>/g),
-    exclusiveGateways: extractElementsWithRegex(bpmnXml, /<bpmn:exclusiveGateway[^>]*id="([^"]*)"(?:[^>]*name="([^"]*)")?[^>]*>/g),
-    parallelGateways: extractElementsWithRegex(bpmnXml, /<bpmn:parallelGateway[^>]*id="([^"]*)"(?:[^>]*name="([^"]*)")?[^>]*>/g),
-    inclusiveGateways: extractElementsWithRegex(bpmnXml, /<bpmn:inclusiveGateway[^>]*id="([^"]*)"(?:[^>]*name="([^"]*)")?[^>]*>/g),
-    startEvents: extractElementsWithRegex(bpmnXml, /<bpmn:startEvent[^>]*id="([^"]*)"(?:[^>]*name="([^"]*)")?[^>]*>/g),
-    endEvents: extractElementsWithRegex(bpmnXml, /<bpmn:endEvent[^>]*id="([^"]*)"(?:[^>]*name="([^"]*)")?[^>]*>/g),
-    sequenceFlows: extractElementsWithRegex(bpmnXml, /<bpmn:sequenceFlow[^>]*id="([^"]*)"(?:[^>]*name="([^"]*)")?[^>]*>/g),
-    lanes: extractElementsWithRegex(bpmnXml, /<bpmn:lane[^>]*id="([^"]*)"(?:[^>]*name="([^"]*)")?[^>]*>/g),
-    pools: extractElementsWithRegex(bpmnXml, /<bpmn:pool[^>]*id="([^"]*)"(?:[^>]*name="([^"]*)")?[^>]*>/g),
+    userTasks: extractElementsWithRegex(bpmnXml, /<(?:bpmn:)?userTask[^>]*id="([^"]*)"(?:[^>]*name="([^"]*)")?[^>]*>/g),
+    serviceTasks: extractElementsWithRegex(bpmnXml, /<(?:bpmn:)?serviceTask[^>]*id="([^"]*)"(?:[^>]*name="([^"]*)")?[^>]*>/g),
+    exclusiveGateways: extractElementsWithRegex(bpmnXml, /<(?:bpmn:)?exclusiveGateway[^>]*id="([^"]*)"(?:[^>]*name="([^"]*)")?[^>]*>/g),
+    parallelGateways: extractElementsWithRegex(bpmnXml, /<(?:bpmn:)?parallelGateway[^>]*id="([^"]*)"(?:[^>]*name="([^"]*)")?[^>]*>/g),
+    inclusiveGateways: extractElementsWithRegex(bpmnXml, /<(?:bpmn:)?inclusiveGateway[^>]*id="([^"]*)"(?:[^>]*name="([^"]*)")?[^>]*>/g),
+    startEvents: extractElementsWithRegex(bpmnXml, /<(?:bpmn:)?startEvent[^>]*id="([^"]*)"(?:[^>]*name="([^"]*)")?[^>]*>/g),
+    endEvents: extractElementsWithRegex(bpmnXml, /<(?:bpmn:)?endEvent[^>]*id="([^"]*)"(?:[^>]*name="([^"]*)")?[^>]*>/g),
+    sequenceFlows: extractElementsWithRegex(bpmnXml, /<(?:bpmn:)?sequenceFlow[^>]*id="([^"]*)"(?:[^>]*name="([^"]*)")?[^>]*>/g),
+    lanes: extractElementsWithRegex(bpmnXml, /<(?:bpmn:)?lane[^>]*id="([^"]*)"(?:[^>]*name="([^"]*)")?[^>]*>/g),
+    pools: extractElementsWithRegex(bpmnXml, /<(?:bpmn:)?pool[^>]*id="([^"]*)"(?:[^>]*name="([^"]*)")?[^>]*>/g),
     allElements: []
   };
   
