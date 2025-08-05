@@ -14,6 +14,9 @@ async function performEnhancedBPMNAnalysis(bpmnXml: string, fileId: string, file
     const complexity = calculateProcessComplexity(elements);
     const roles = analyzeRoleDistribution(elements);
     
+    // NEW: Create numbered elements with swim lane mapping for Excel export
+    const exportData = createExportDataStructure(bpmnXml, elements);
+    
     // AI-powered insights with BPMN context
     const aiInsights = await getAIProcessInsights(bpmnXml, elements, complexity, roles);
     
@@ -42,7 +45,9 @@ async function performEnhancedBPMNAnalysis(bpmnXml: string, fileId: string, file
         editingSuggestions: aiInsights.editingSuggestions
       },
       findings,
-      stakeholderDocumentation: stakeholderDocs
+      stakeholderDocumentation: stakeholderDocs,
+      // NEW: Export-ready data structure for Excel conversion
+      exportData
     };
   } catch (error) {
     console.error('Enhanced BPMN analysis error:', error);
@@ -101,6 +106,149 @@ function extractElementsWithRegex(xml: string, regex: RegExp) {
     });
   }
   return elements;
+}
+
+// NEW: Create export-ready data structure with numbered elements and swim lane mapping
+function createExportDataStructure(bpmnXml: string, elements: any) {
+  console.log('📊 Creating export data structure with numbered elements and swim lanes...');
+  
+  // Parse swim lane structure from BPMN XML
+  const swimLaneMapping = parseSwimLanes(bpmnXml);
+  
+  // Collect all flow elements in process order with numbering
+  const numberedElements = [];
+  let stepNumber = 1;
+  
+  // Helper function to add element with swim lane info
+  const addElement = (element: any, elementType: string) => {
+    const swimLane = findElementSwimLane(element.id, swimLaneMapping, bpmnXml);
+    numberedElements.push({
+      stepNumber: stepNumber++,
+      stepDetail: element.name || element.id,
+      swimLane: swimLane || 'Unassigned',
+      elementType: elementType,
+      elementId: element.id
+    });
+  };
+  
+  // Add elements in typical BPMN flow order: events → tasks → gateways
+  elements.startEvents.forEach((element: any) => addElement(element, 'startEvent'));
+  elements.userTasks.forEach((element: any) => addElement(element, 'userTask'));
+  elements.serviceTasks.forEach((element: any) => addElement(element, 'serviceTask'));
+  elements.exclusiveGateways.forEach((element: any) => addElement(element, 'exclusiveGateway'));
+  elements.parallelGateways.forEach((element: any) => addElement(element, 'parallelGateway'));
+  elements.inclusiveGateways.forEach((element: any) => addElement(element, 'inclusiveGateway'));
+  elements.endEvents.forEach((element: any) => addElement(element, 'endEvent'));
+  
+  console.log(`✅ Created ${numberedElements.length} numbered elements with swim lanes`);
+  console.log('🏊 Swim lane distribution:', 
+    Object.entries(swimLaneMapping.elementToLane).reduce((acc: any, [_, lane]) => {
+      acc[lane] = (acc[lane] || 0) + 1;
+      return acc;
+    }, {})
+  );
+  
+  return {
+    numberedElements,
+    swimLaneMapping: swimLaneMapping.elementToLane,
+    laneDefinitions: swimLaneMapping.lanes,
+    totalElements: numberedElements.length,
+    exportMetadata: {
+      generatedAt: new Date().toISOString(),
+      totalLanes: Object.keys(swimLaneMapping.lanes).length,
+      unassignedElements: numberedElements.filter(e => e.swimLane === 'Unassigned').length
+    }
+  };
+}
+
+// Parse BPMN swim lanes and create element-to-lane mapping
+function parseSwimLanes(bpmnXml: string) {
+  console.log('🏊 Parsing swim lanes and element assignments...');
+  
+  const lanes: any = {};
+  const elementToLane: any = {};
+  
+  // Extract lane definitions with their flowNodeRefs
+  const laneRegex = /<bpmn:lane[^>]*id="([^"]*)"(?:[^>]*name="([^"]*)")?[^>]*>([\s\S]*?)<\/bpmn:lane>/g;
+  let laneMatch;
+  
+  while ((laneMatch = laneRegex.exec(bpmnXml)) !== null) {
+    const laneId = laneMatch[1];
+    const laneName = laneMatch[2] || laneId;
+    const laneContent = laneMatch[3];
+    
+    lanes[laneId] = {
+      id: laneId,
+      name: laneName,
+      elements: []
+    };
+    
+    // Extract flowNodeRef elements within this lane
+    const flowNodeRegex = /<bpmn:flowNodeRef>([^<]+)<\/bpmn:flowNodeRef>/g;
+    let nodeMatch;
+    
+    while ((nodeMatch = flowNodeRegex.exec(laneContent)) !== null) {
+      const elementId = nodeMatch[1];
+      elementToLane[elementId] = laneName;
+      lanes[laneId].elements.push(elementId);
+    }
+  }
+  
+  // Also check for participant/pool level assignments
+  const participantRegex = /<bpmn:participant[^>]*id="([^"]*)"(?:[^>]*name="([^"]*)")?[^>]*>/g;
+  let participantMatch;
+  
+  while ((participantMatch = participantRegex.exec(bpmnXml)) !== null) {
+    const participantId = participantMatch[1];
+    const participantName = participantMatch[2] || participantId;
+    
+    // If no specific lanes found, assign to participant level
+    if (Object.keys(lanes).length === 0) {
+      lanes[participantId] = {
+        id: participantId,
+        name: participantName,
+        elements: []
+      };
+    }
+  }
+  
+  console.log(`✅ Parsed ${Object.keys(lanes).length} swim lanes:`, Object.values(lanes).map((l: any) => l.name));
+  
+  return {
+    lanes,
+    elementToLane
+  };
+}
+
+// Find which swim lane an element belongs to
+function findElementSwimLane(elementId: string, swimLaneMapping: any, bpmnXml: string) {
+  // Check direct mapping from lane flowNodeRefs
+  if (swimLaneMapping.elementToLane[elementId]) {
+    return swimLaneMapping.elementToLane[elementId];
+  }
+  
+  // Check if element is contained within any lane by position
+  for (const [laneId, laneInfo] of Object.entries(swimLaneMapping.lanes)) {
+    const laneData = laneInfo as any;
+    if (laneData.elements.includes(elementId)) {
+      return laneData.name;
+    }
+  }
+  
+  // If no specific lane assignment, check for pool-level assignment
+  const poolRegex = /<bpmn:process[^>]*>([\s\S]*?)<\/bpmn:process>/g;
+  const poolMatch = poolRegex.exec(bpmnXml);
+  
+  if (poolMatch && poolMatch[1].includes(elementId)) {
+    // Look for a default pool/participant name
+    const participantRegex = /<bpmn:participant[^>]*name="([^"]*)"[^>]*>/;
+    const participantMatch = participantRegex.exec(bpmnXml);
+    if (participantMatch) {
+      return participantMatch[1];
+    }
+  }
+  
+  return null; // Will be mapped to 'Unassigned' by caller
 }
 
 function calculateProcessComplexity(elements: any) {
