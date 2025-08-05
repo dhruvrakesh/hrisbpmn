@@ -61,6 +61,7 @@ interface AnalysisResult {
 }
 
 const Index = () => {
+  // STEP 1: ALL HOOKS MUST BE DECLARED FIRST - BEFORE ANY CONDITIONAL LOGIC
   const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const location = useLocation();
@@ -70,6 +71,7 @@ const Index = () => {
   const [activeTab, setActiveTab] = useState("upload");
   const [bpmnViewerRef, setBpmnViewerRef] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  
   // Global applied suggestions tracking with localStorage persistence
   const [appliedSuggestions, setAppliedSuggestions] = useState<Set<string>>(() => {
     try {
@@ -83,6 +85,7 @@ const Index = () => {
   // Global suggestion lock to prevent infinite loops  
   const [globalSuggestionLock, setGlobalSuggestionLock] = useState<Set<string>>(new Set());
 
+  // STEP 2: ALL EFFECTS DECLARED HERE
   // Check admin status
   useEffect(() => {
     const checkAdminStatus = async () => {
@@ -133,8 +136,105 @@ const Index = () => {
     if (user && location.state) {
       handleAdminNavigation();
     }
-  }, [user, location.state]);
+  }, [user, location.state, toast]);
 
+  // STEP 3: ALL CALLBACKS DECLARED HERE
+  const handleApplySuggestion = useCallback((suggestion: any) => {
+    if (!uploadedFile) {
+      toast({
+        title: "Error", 
+        description: "No BPMN file is loaded. Please upload a file first.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Check global suggestion lock first
+    if (globalSuggestionLock.has(suggestion.id)) {
+      console.log('🔒 Suggestion blocked by global lock:', suggestion.id);
+      toast({
+        title: "Already Applied",
+        description: `Suggestion "${suggestion.description}" has already been applied in this session.`,
+        variant: "default",
+      });
+      return;
+    }
+
+    // Check if suggestion was already applied
+    if (appliedSuggestions.has(suggestion.id)) {
+      console.log('⚠️ Suggestion already applied:', suggestion.id);
+      toast({
+        title: "Already Applied",
+        description: `Suggestion "${suggestion.description}" has already been applied.`,
+        variant: "default",
+      });
+      return;
+    }
+
+    console.log('🚀 Starting suggestion application from Results tab:', suggestion.id);
+
+    // Add to global lock immediately
+    setGlobalSuggestionLock(prev => new Set([...prev, suggestion.id]));
+
+    // Mark suggestion as being applied immediately to prevent duplicates
+    setAppliedSuggestions(prev => {
+      const newSet = new Set([...prev, suggestion.id]);
+      localStorage.setItem('appliedSuggestions', JSON.stringify([...newSet]));
+      return newSet;
+    });
+
+    // Remove from analysis results immediately to prevent re-application
+    setAnalysisResult(prev => {
+      if (!prev?.processIntelligence?.editingSuggestions) return prev;
+      
+      const updatedSuggestions = prev.processIntelligence.editingSuggestions.filter(
+        (s: any) => s.id !== suggestion.id
+      );
+      
+      return {
+        ...prev,
+        processIntelligence: {
+          ...prev.processIntelligence,
+          editingSuggestions: updatedSuggestions
+        }
+      };
+    });
+
+    // Forward to BPMN viewer via custom event
+    const event = new CustomEvent('applySuggestion', { detail: suggestion });
+    window.dispatchEvent(event);
+  }, [uploadedFile, appliedSuggestions, globalSuggestionLock, toast]);
+
+  const handleSuggestionApplied = useCallback((appliedSuggestion: any) => {
+    console.log('✅ Index - Suggestion applied, removing from results:', appliedSuggestion);
+    
+    // Remove from analysis results immediately
+    setAnalysisResult(prevResult => {
+      if (!prevResult?.processIntelligence?.editingSuggestions) return prevResult;
+      
+      return {
+        ...prevResult,
+        processIntelligence: {
+          ...prevResult.processIntelligence,
+          editingSuggestions: prevResult.processIntelligence.editingSuggestions.filter(
+            (s: any) => s.id !== appliedSuggestion.id
+          )
+        }
+      };
+    });
+    
+    // Ensure it's tracked as applied and persisted
+    setAppliedSuggestions(prev => {
+      const newSet = new Set([...prev, appliedSuggestion.id]);
+      localStorage.setItem('appliedSuggestions', JSON.stringify([...newSet]));
+      return newSet;
+    });
+    
+    // Keep in global lock permanently for this session
+    setGlobalSuggestionLock(prev => new Set([...prev, appliedSuggestion.id]));
+  }, []);
+
+  // STEP 4: CONDITIONAL RENDERING AFTER ALL HOOKS
   // Redirect to auth if not authenticated
   if (!authLoading && !user) {
     return <Navigate to="/auth" replace />;
@@ -270,100 +370,6 @@ const Index = () => {
     }
   };
 
-  const handleApplySuggestion = useCallback((suggestion: any) => {
-    if (!uploadedFile) {
-      toast({
-        title: "Error", 
-        description: "No BPMN file is loaded. Please upload a file first.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Check global suggestion lock first
-    if (globalSuggestionLock.has(suggestion.id)) {
-      console.log('🔒 Suggestion blocked by global lock:', suggestion.id);
-      toast({
-        title: "Already Applied",
-        description: `Suggestion "${suggestion.description}" has already been applied in this session.`,
-        variant: "default",
-      });
-      return;
-    }
-
-    // Check if suggestion was already applied
-    if (appliedSuggestions.has(suggestion.id)) {
-      console.log('⚠️ Suggestion already applied:', suggestion.id);
-      toast({
-        title: "Already Applied",
-        description: `Suggestion "${suggestion.description}" has already been applied.`,
-        variant: "default",
-      });
-      return;
-    }
-
-    console.log('🚀 Starting suggestion application from Results tab:', suggestion.id);
-
-    // Add to global lock immediately
-    setGlobalSuggestionLock(prev => new Set([...prev, suggestion.id]));
-
-    // Mark suggestion as being applied immediately to prevent duplicates
-    setAppliedSuggestions(prev => {
-      const newSet = new Set([...prev, suggestion.id]);
-      localStorage.setItem('appliedSuggestions', JSON.stringify([...newSet]));
-      return newSet;
-    });
-
-    // Remove from analysis results immediately to prevent re-application
-    setAnalysisResult(prev => {
-      if (!prev?.processIntelligence?.editingSuggestions) return prev;
-      
-      const updatedSuggestions = prev.processIntelligence.editingSuggestions.filter(
-        (s: any) => s.id !== suggestion.id
-      );
-      
-      return {
-        ...prev,
-        processIntelligence: {
-          ...prev.processIntelligence,
-          editingSuggestions: updatedSuggestions
-        }
-      };
-    });
-
-    // Forward to BPMN viewer via custom event
-    const event = new CustomEvent('applySuggestion', { detail: suggestion });
-    window.dispatchEvent(event);
-  }, [uploadedFile, appliedSuggestions, globalSuggestionLock, toast]);
-
-  const handleSuggestionApplied = useCallback((appliedSuggestion: any) => {
-    console.log('✅ Index - Suggestion applied, removing from results:', appliedSuggestion);
-    
-    // Remove from analysis results immediately
-    setAnalysisResult(prevResult => {
-      if (!prevResult?.processIntelligence?.editingSuggestions) return prevResult;
-      
-      return {
-        ...prevResult,
-        processIntelligence: {
-          ...prevResult.processIntelligence,
-          editingSuggestions: prevResult.processIntelligence.editingSuggestions.filter(
-            (s: any) => s.id !== appliedSuggestion.id
-          )
-        }
-      };
-    });
-    
-    // Ensure it's tracked as applied and persisted
-    setAppliedSuggestions(prev => {
-      const newSet = new Set([...prev, appliedSuggestion.id]);
-      localStorage.setItem('appliedSuggestions', JSON.stringify([...newSet]));
-      return newSet;
-    });
-    
-    // Keep in global lock permanently for this session
-    setGlobalSuggestionLock(prev => new Set([...prev, appliedSuggestion.id]));
-  }, []);
 
   return (
     <ErrorBoundary>
