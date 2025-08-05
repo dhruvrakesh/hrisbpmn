@@ -254,9 +254,18 @@ const Index = () => {
   };
 
   const runAnalysis = async () => {
-    if (!uploadedFile) return;
+    if (!uploadedFile) {
+      console.error('❌ No uploaded file found for analysis');
+      return;
+    }
 
     console.log('🚀 Starting BPMN analysis for file:', uploadedFile.fileName);
+    console.log('📋 File details:', {
+      id: uploadedFile.id,
+      fileName: uploadedFile.fileName,
+      filePath: uploadedFile.filePath
+    });
+    
     setAnalyzing(true);
     setAnalysisResult(null);
 
@@ -264,30 +273,58 @@ const Index = () => {
       // Send applied suggestions to prevent regeneration
       const appliedSuggestionsArray = [...appliedSuggestions];
       
-      console.log('📤 Invoking analyze-bpmn function with:', {
+      console.log('📤 About to invoke analyze-bpmn function with payload:', {
         fileId: uploadedFile.id,
         filePath: uploadedFile.filePath,
-        appliedSuggestionsCount: appliedSuggestionsArray.length
+        appliedSuggestionsCount: appliedSuggestionsArray.length,
+        timestamp: new Date().toISOString()
       });
+
+      // Add timestamp to track function call timing
+      const startTime = Date.now();
+      console.log('⏱️ Function call started at:', new Date(startTime).toISOString());
       
       const { data, error } = await supabase.functions.invoke('analyze-bpmn', {
         body: {
           fileId: uploadedFile.id,
           filePath: uploadedFile.filePath,
-          appliedSuggestions: appliedSuggestionsArray, // Filter out already applied
+          appliedSuggestions: appliedSuggestionsArray,
         },
       });
 
+      const endTime = Date.now();
+      console.log('⏱️ Function call completed in:', endTime - startTime, 'ms');
+
+      console.log('📥 Raw function response:', {
+        data: data,
+        error: error,
+        hasData: !!data,
+        dataKeys: data ? Object.keys(data) : []
+      });
+
       if (error) {
-        console.error('❌ Supabase function error:', error);
+        console.error('❌ Supabase function error details:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code,
+          status: error.status
+        });
         throw error;
       }
 
-      console.log('✅ Analysis completed, received data:', {
+      if (!data) {
+        console.error('❌ Function returned no data');
+        throw new Error('Function returned no data');
+      }
+
+      console.log('✅ Analysis completed successfully! Data summary:', {
         hasExportData: !!data.exportData,
+        exportDataKeys: data.exportData ? Object.keys(data.exportData) : [],
         numberedElements: data.exportData?.numberedElements?.length || 0,
         findings: data.findings?.length || 0,
-        editingSuggestions: data.processIntelligence?.editingSuggestions?.length || 0
+        editingSuggestions: data.processIntelligence?.editingSuggestions?.length || 0,
+        fullDataStructure: Object.keys(data)
       });
 
       // Filter out any suggestions that are already applied (double safety)
@@ -305,10 +342,38 @@ const Index = () => {
       });
 
     } catch (error: any) {
-      console.error('❌ Analysis error:', error);
+      console.error('❌ CRITICAL: Analysis function call failed!', {
+        errorMessage: error.message,
+        errorStack: error.stack,
+        errorName: error.name,
+        errorCode: error.code,
+        errorDetails: error.details,
+        isNetworkError: error.message?.includes('network') || error.message?.includes('fetch'),
+        isCorsError: error.message?.includes('cors') || error.message?.includes('origin'),
+        isTimeoutError: error.message?.includes('timeout'),
+        fullError: error
+      });
+
+      // Specific error handling for common issues
+      let errorDescription = "Failed to analyze the BPMN file.";
+      
+      if (error.message?.includes('network') || error.message?.includes('fetch')) {
+        errorDescription = "Network error: Unable to reach the analysis server. Check your connection.";
+      } else if (error.message?.includes('cors') || error.message?.includes('origin')) {
+        errorDescription = "CORS error: Function call blocked by browser security.";
+      } else if (error.message?.includes('timeout')) {
+        errorDescription = "Timeout error: Analysis took too long to complete.";
+      } else if (error.message?.includes('401') || error.message?.includes('unauthorized')) {
+        errorDescription = "Authentication error: Please sign in again.";
+      } else if (error.message?.includes('404')) {
+        errorDescription = "Function not found: The analyze-bpmn function may not be deployed.";
+      } else if (error.code) {
+        errorDescription = `Function error (${error.code}): ${error.message}`;
+      }
+
       toast({
         title: "Analysis Failed",
-        description: error.message || "Failed to analyze the BPMN file.",
+        description: errorDescription,
         variant: "destructive",
       });
     } finally {
