@@ -168,14 +168,18 @@ function parseSwimLanes(bpmnXml: string) {
   const lanes: any = {};
   const elementToLane: any = {};
   
-  // Extract lane definitions with their flowNodeRefs
-  const laneRegex = /<bpmn:lane[^>]*id="([^"]*)"(?:[^>]*name="([^"]*)")?[^>]*>([\s\S]*?)<\/bpmn:lane>/g;
+  // Enhanced regex patterns to handle both prefixed and non-prefixed elements
+  const laneRegex = /<(?:bpmn:)?lane[^>]*id="([^"]*)"(?:[^>]*name="([^"]*)")?[^>]*>([\s\S]*?)<\/(?:bpmn:)?lane>/g;
   let laneMatch;
+  
+  console.log('🔍 Searching for lanes in BPMN XML...');
   
   while ((laneMatch = laneRegex.exec(bpmnXml)) !== null) {
     const laneId = laneMatch[1];
     const laneName = laneMatch[2] || laneId;
     const laneContent = laneMatch[3];
+    
+    console.log(`🏊 Found lane: "${laneName}" (${laneId})`);
     
     lanes[laneId] = {
       id: laneId,
@@ -183,24 +187,29 @@ function parseSwimLanes(bpmnXml: string) {
       elements: []
     };
     
-    // Extract flowNodeRef elements within this lane
-    const flowNodeRegex = /<bpmn:flowNodeRef>([^<]+)<\/bpmn:flowNodeRef>/g;
+    // Enhanced flowNodeRef patterns to handle both formats
+    const flowNodeRegex = /<(?:bpmn:)?flowNodeRef[^>]*>([^<]+)<\/(?:bpmn:)?flowNodeRef>/g;
     let nodeMatch;
     
     while ((nodeMatch = flowNodeRegex.exec(laneContent)) !== null) {
       const elementId = nodeMatch[1];
       elementToLane[elementId] = laneName;
       lanes[laneId].elements.push(elementId);
+      console.log(`  📍 Lane "${laneName}" contains element: ${elementId}`);
     }
   }
   
-  // Also check for participant/pool level assignments
-  const participantRegex = /<bpmn:participant[^>]*id="([^"]*)"(?:[^>]*name="([^"]*)")?[^>]*>/g;
+  // Also check for participant/pool level assignments with enhanced regex
+  const participantRegex = /<(?:bpmn:)?participant[^>]*id="([^"]*)"(?:[^>]*name="([^"]*)")?[^>]*>/g;
   let participantMatch;
+  
+  console.log('🔍 Searching for participants...');
   
   while ((participantMatch = participantRegex.exec(bpmnXml)) !== null) {
     const participantId = participantMatch[1];
     const participantName = participantMatch[2] || participantId;
+    
+    console.log(`🏢 Found participant: "${participantName}" (${participantId})`);
     
     // If no specific lanes found, assign to participant level
     if (Object.keys(lanes).length === 0) {
@@ -212,7 +221,84 @@ function parseSwimLanes(bpmnXml: string) {
     }
   }
   
-  console.log(`✅ Parsed ${Object.keys(lanes).length} swim lanes:`, Object.values(lanes).map((l: any) => l.name));
+  // Enhanced: Look for collaboration-level lane structures
+  const collaborationRegex = /<(?:bpmn:)?collaboration[^>]*>([\s\S]*?)<\/(?:bpmn:)?collaboration>/g;
+  const collaborationMatch = collaborationRegex.exec(bpmnXml);
+  
+  if (collaborationMatch) {
+    console.log('🤝 Found collaboration section, checking for participant roles...');
+    const collabContent = collaborationMatch[1];
+    
+    // Extract additional participant information from collaboration
+    const detailedParticipantRegex = /<(?:bpmn:)?participant[^>]*id="([^"]*)"[^>]*name="([^"]*)"[^>]*processRef="([^"]*)"[^>]*>/g;
+    let detailedMatch;
+    
+    while ((detailedMatch = detailedParticipantRegex.exec(collabContent)) !== null) {
+      const participantId = detailedMatch[1];
+      const participantName = detailedMatch[2];
+      const processRef = detailedMatch[3];
+      
+      console.log(`🔗 Detailed participant: "${participantName}" -> Process: ${processRef}`);
+      
+      // If we haven't found lanes yet, create from participants
+      if (Object.keys(lanes).length === 0) {
+        lanes[participantId] = {
+          id: participantId,
+          name: participantName,
+          elements: [],
+          processRef: processRef
+        };
+      }
+    }
+  }
+  
+  // Final fallback: If no lanes or participants found, check for roles in the process
+  if (Object.keys(lanes).length === 0) {
+    console.log('⚠️ No explicit lanes found, attempting to extract roles from task assignments...');
+    
+    // Look for role-based patterns in task names or documentation
+    const processRegex = /<(?:bpmn:)?process[^>]*>([\s\S]*?)<\/(?:bpmn:)?process>/g;
+    const processMatch = processRegex.exec(bpmnXml);
+    
+    if (processMatch) {
+      // Extract unique role indicators from task names/documentation
+      const rolePatterns = [
+        /(?:HR|Human Resources)/i,
+        /(?:Manager|Management)/i,
+        /(?:Admin|Administrator)/i,
+        /(?:Recruiter|Recruitment)/i,
+        /(?:Employee|Staff)/i,
+        /(?:Candidate|Applicant)/i
+      ];
+      
+      const foundRoles = new Set<string>();
+      
+      rolePatterns.forEach((pattern, index) => {
+        if (pattern.test(processMatch[1])) {
+          const roleName = ['HR', 'Manager', 'Admin', 'Recruiter', 'Employee', 'Candidate'][index];
+          foundRoles.add(roleName);
+        }
+      });
+      
+      if (foundRoles.size > 0) {
+        console.log(`🎭 Detected ${foundRoles.size} roles from process content: ${Array.from(foundRoles).join(', ')}`);
+        
+        Array.from(foundRoles).forEach((role, index) => {
+          lanes[`role_${index}`] = {
+            id: `role_${index}`,
+            name: role,
+            elements: [],
+            type: 'inferred'
+          };
+        });
+      }
+    }
+  }
+  
+  console.log(`✅ Final result: ${Object.keys(lanes).length} swim lanes found`);
+  Object.values(lanes).forEach((lane: any) => {
+    console.log(`  🏊 Lane: "${lane.name}" with ${lane.elements.length} elements`);
+  });
   
   return {
     lanes,

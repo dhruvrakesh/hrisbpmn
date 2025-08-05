@@ -9,6 +9,7 @@ import { ZoomIn, ZoomOut, RotateCcw, Play, Save, Undo, Redo, FolderOpen, Downloa
 import * as XLSX from 'xlsx';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import BizagiIntegration from './BizagiIntegration';
+import { ProcessElementBrowser } from './ProcessElementBrowser';
 
 interface BpmnViewerProps {
   fileId: string;
@@ -956,21 +957,36 @@ const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave, suggestions
                    <TooltipContent>Fit to View</TooltipContent>
                  </Tooltip>
                  
-                 <Tooltip>
-                   <TooltipTrigger asChild>
-                     <Button 
-                       variant={showNumbers ? "default" : "outline"} 
-                       size="sm" 
-                       onClick={toggleElementNumbers}
-                       disabled={!analysisResult?.exportData?.numberedElements}
-                     >
-                       <Hash className="h-4 w-4" />
-                     </Button>
-                   </TooltipTrigger>
-                   <TooltipContent>
-                     {showNumbers ? 'Hide Element Numbers' : 'Show Element Numbers'}
-                   </TooltipContent>
-                 </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button 
+                        variant={showNumbers ? "default" : "outline"} 
+                        size="sm" 
+                        onClick={toggleElementNumbers}
+                        disabled={!analysisResult?.exportData?.numberedElements}
+                      >
+                        <Hash className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {showNumbers ? 'Hide' : 'Show'} AI-generated element numbering (Process flow order: Start → Tasks → Gateways → End)
+                    </TooltipContent>
+                  </Tooltip>
+                  
+                  <ProcessElementBrowser 
+                    analysisResult={analysisResult}
+                    onElementUpdate={(elementId, updates) => {
+                      console.log('Element updated:', elementId, updates);
+                      // Refresh the numbering display
+                      if (showNumbers) {
+                        setShowNumbers(false);
+                        setTimeout(() => setShowNumbers(true), 100);
+                      }
+                    }}
+                    onSwimLaneUpdate={(laneId, updates) => {
+                      console.log('Swim lane updated:', laneId, updates);
+                    }}
+                  />
                  
                  <Tooltip>
                    <TooltipTrigger asChild>

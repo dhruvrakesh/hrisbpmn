@@ -459,6 +459,59 @@ export type Database = {
           },
         ]
       }
+      bpmn_element_customizations: {
+        Row: {
+          analysis_result_id: string
+          created_at: string
+          custom_description: string | null
+          custom_step_number: number | null
+          custom_swim_lane: string | null
+          element_id: string
+          element_type: string
+          id: string
+          original_step_number: number
+          original_swim_lane: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          analysis_result_id: string
+          created_at?: string
+          custom_description?: string | null
+          custom_step_number?: number | null
+          custom_swim_lane?: string | null
+          element_id: string
+          element_type: string
+          id?: string
+          original_step_number: number
+          original_swim_lane?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          analysis_result_id?: string
+          created_at?: string
+          custom_description?: string | null
+          custom_step_number?: number | null
+          custom_swim_lane?: string | null
+          element_id?: string
+          element_type?: string
+          id?: string
+          original_step_number?: number
+          original_swim_lane?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bpmn_element_customizations_analysis_result_id_fkey"
+            columns: ["analysis_result_id"]
+            isOneToOne: false
+            referencedRelation: "bpmn_analysis_results"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bpmn_files: {
         Row: {
           created_at: string | null
@@ -491,6 +544,53 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      bpmn_swim_lane_customizations: {
+        Row: {
+          analysis_result_id: string
+          color_code: string | null
+          created_at: string
+          custom_name: string | null
+          description: string | null
+          id: string
+          lane_id: string
+          original_name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          analysis_result_id: string
+          color_code?: string | null
+          created_at?: string
+          custom_name?: string | null
+          description?: string | null
+          id?: string
+          lane_id: string
+          original_name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          analysis_result_id?: string
+          color_code?: string | null
+          created_at?: string
+          custom_name?: string | null
+          description?: string | null
+          id?: string
+          lane_id?: string
+          original_name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bpmn_swim_lane_customizations_analysis_result_id_fkey"
+            columns: ["analysis_result_id"]
+            isOneToOne: false
+            referencedRelation: "bpmn_analysis_results"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       bpmn_templates: {
         Row: {
