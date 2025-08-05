@@ -743,10 +743,16 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  console.log('🚀 BPMN Analysis Function Started');
+  console.log('📥 Request method:', req.method);
+
   try {
     const { fileId, filePath } = await req.json();
     
+    console.log('📋 Request data:', { fileId, filePath });
+    
     if (!fileId || !filePath) {
+      console.error('❌ Missing required parameters:', { fileId, filePath });
       return new Response(
         JSON.stringify({ error: 'Missing fileId or filePath' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -776,7 +782,32 @@ serve(async (req) => {
     const analysisResult = await performEnhancedBPMNAnalysis(bpmnXml, fileId, filePath);
     
     console.log('Analysis completed successfully');
+    console.log('Export data generated:', {
+      numberedElements: analysisResult.exportData?.numberedElements?.length || 0,
+      swimLanes: Object.keys(analysisResult.exportData?.laneDefinitions || {}).length
+    });
     console.log('Editing suggestions generated:', analysisResult.processIntelligence.editingSuggestions.length);
+
+    // Store analysis results in database for persistence
+    const { error: insertError } = await supabase
+      .from('bpmn_analysis_results')
+      .upsert({
+        file_id: fileId,
+        analysis_data: analysisResult,
+        summary: analysisResult.summary,
+        findings: analysisResult.findings,
+        ai_insights: analysisResult.processIntelligence,
+        updated_at: new Date().toISOString()
+      }, {
+        onConflict: 'file_id'
+      });
+
+    if (insertError) {
+      console.error('Failed to store analysis results:', insertError);
+      // Still return the analysis results even if storage fails
+    } else {
+      console.log('✅ Analysis results stored successfully in database');
+    }
 
     return new Response(JSON.stringify(analysisResult), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

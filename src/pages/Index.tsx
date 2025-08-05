@@ -256,12 +256,19 @@ const Index = () => {
   const runAnalysis = async () => {
     if (!uploadedFile) return;
 
+    console.log('🚀 Starting BPMN analysis for file:', uploadedFile.fileName);
     setAnalyzing(true);
     setAnalysisResult(null);
 
     try {
       // Send applied suggestions to prevent regeneration
       const appliedSuggestionsArray = [...appliedSuggestions];
+      
+      console.log('📤 Invoking analyze-bpmn function with:', {
+        fileId: uploadedFile.id,
+        filePath: uploadedFile.filePath,
+        appliedSuggestionsCount: appliedSuggestionsArray.length
+      });
       
       const { data, error } = await supabase.functions.invoke('analyze-bpmn', {
         body: {
@@ -272,8 +279,16 @@ const Index = () => {
       });
 
       if (error) {
+        console.error('❌ Supabase function error:', error);
         throw error;
       }
+
+      console.log('✅ Analysis completed, received data:', {
+        hasExportData: !!data.exportData,
+        numberedElements: data.exportData?.numberedElements?.length || 0,
+        findings: data.findings?.length || 0,
+        editingSuggestions: data.processIntelligence?.editingSuggestions?.length || 0
+      });
 
       // Filter out any suggestions that are already applied (double safety)
       if (data.aiSuggestions) {
@@ -286,11 +301,11 @@ const Index = () => {
       setActiveTab("results");
       toast({
         title: "Analysis Complete",
-        description: `Found ${data.findings?.length || 0} findings. Process complexity: ${data.summary?.riskLevel || 'Unknown'}.`,
+        description: `Found ${data.findings?.length || 0} findings. Export data: ${data.exportData?.numberedElements?.length || 0} elements.`,
       });
 
     } catch (error: any) {
-      console.error('Analysis error:', error);
+      console.error('❌ Analysis error:', error);
       toast({
         title: "Analysis Failed",
         description: error.message || "Failed to analyze the BPMN file.",
