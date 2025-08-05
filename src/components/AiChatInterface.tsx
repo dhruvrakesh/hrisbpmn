@@ -57,6 +57,7 @@ const AiChatInterface = ({ bpmnFileId, bpmnContext, analysisResult }: AiChatInte
     }
     
     setLoading(true);
+    console.log('💬 Sending AI chat message:', { message, bpmnFileId, sessionId });
 
     // Add user message to UI immediately
     const userMessage: Message = {
@@ -69,29 +70,42 @@ const AiChatInterface = ({ bpmnFileId, bpmnContext, analysisResult }: AiChatInte
     setMessages(prev => [...prev, userMessage]);
 
     try {
-      const { data, error } = await supabase.functions.invoke('ai-chat', {
-        body: {
-          sessionId,
-          message,
-          bpmnFileId,
-          bpmnContext: {
-            ...bpmnContext,
-            analysisResult: analysisResult ? {
-              summary: analysisResult.summary,
-              processIntelligence: analysisResult.processIntelligence,
-              findingsCount: analysisResult.findings?.length || 0
-            } : null
-          }
+      const requestPayload = {
+        sessionId,
+        message,
+        bpmnFileId,
+        bpmnContext: {
+          ...bpmnContext,
+          analysisResult: analysisResult ? {
+            summary: analysisResult.summary,
+            processIntelligence: analysisResult.processIntelligence,
+            findingsCount: analysisResult.findings?.length || 0
+          } : null
         }
+      };
+
+      console.log('📤 AI chat request payload:', requestPayload);
+
+      const { data, error } = await supabase.functions.invoke('ai-chat', {
+        body: requestPayload
       });
 
+      console.log('📥 AI chat response:', { data, error });
+
       if (error) {
-        throw error;
+        console.error('❌ AI chat error:', error);
+        throw new Error(error.message || 'Failed to get AI response');
+      }
+
+      if (!data || !data.response) {
+        console.error('❌ Invalid AI response format:', data);
+        throw new Error('Invalid response format from AI service');
       }
 
       // Update session ID if new
       if (data.sessionId && !sessionId) {
         setSessionId(data.sessionId);
+        console.log('✅ Session ID updated:', data.sessionId);
       }
 
       // Add assistant message
@@ -103,6 +117,7 @@ const AiChatInterface = ({ bpmnFileId, bpmnContext, analysisResult }: AiChatInte
       };
 
       setMessages(prev => [...prev, assistantMessage]);
+      console.log('✅ AI response added to chat:', assistantMessage.content.substring(0, 100) + '...');
 
       toast({
         title: "AI Response",
@@ -110,13 +125,13 @@ const AiChatInterface = ({ bpmnFileId, bpmnContext, analysisResult }: AiChatInte
       });
 
     } catch (error: any) {
-      console.error('Chat error:', error);
+      console.error('❌ Chat error details:', error);
       
       // Add error message
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: `I apologize, but I encountered an error: ${error.message}. Please try again.`,
+        content: `I apologize, but I encountered an error: ${error.message || 'Unknown error'}. Please try again or clear the conversation to start fresh.`,
         timestamp: new Date().toISOString()
       };
 
@@ -129,6 +144,7 @@ const AiChatInterface = ({ bpmnFileId, bpmnContext, analysisResult }: AiChatInte
       });
     } finally {
       setLoading(false);
+      console.log('🏁 AI chat request completed, loading state cleared');
     }
   };
 

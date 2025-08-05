@@ -25,23 +25,35 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  console.log('🚀 AI Chat request received:', req.method);
+
   try {
     const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
     if (!OPENAI_API_KEY) {
+      console.error('❌ OPENAI_API_KEY is not configured');
       throw new Error('OPENAI_API_KEY is not configured');
     }
 
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+      console.error('❌ Supabase configuration missing');
       throw new Error('Supabase configuration missing');
     }
 
     // Initialize Supabase client
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    const { sessionId, message, bpmnFileId, bpmnContext }: ChatRequest = await req.json();
+    const requestBody = await req.json();
+    console.log('📥 Request body received:', {
+      hasSessionId: !!requestBody.sessionId,
+      messageLength: requestBody.message?.length || 0,
+      hasBpmnFileId: !!requestBody.bpmnFileId,
+      hasBpmnContext: !!requestBody.bpmnContext
+    });
+
+    const { sessionId, message, bpmnFileId, bpmnContext }: ChatRequest = requestBody;
 
     // Get user from auth header
     const authHeader = req.headers.get('authorization');
@@ -138,26 +150,47 @@ serve(async (req) => {
         token_count: Math.ceil(message.length / 4) // Rough token estimate
       });
 
+    // Enhanced BPMN context if available
+    if (bpmnContext && bpmnContext.analysisResult) {
+      const analysisInfo = bpmnContext.analysisResult;
+      bpmnAnalysisContext += `\n\nCurrent Analysis Results:
+- Process Summary: ${analysisInfo.summary || 'Not available'}
+- Process Intelligence: ${JSON.stringify(analysisInfo.processIntelligence || {})}
+- Findings Count: ${analysisInfo.findingsCount || 0}
+
+Please reference this specific analysis data in your responses and provide actionable insights based on these findings.`;
+    }
+
     // Prepare conversation for OpenAI
     const conversationMessages: ChatMessage[] = [
       {
         role: 'system',
-        content: `You are an expert HRIS (Human Resources Information System) process analyst and consultant. You specialize in:
+        content: `🎯 You are an expert HRIS (Human Resources Information System) process analyst and consultant specializing in BPMN analysis and SAP SuccessFactors.
 
+🔍 **Core Expertise:**
 1. **HRIS Process Optimization**: Employee lifecycle, payroll, benefits, performance management, compliance
-2. **BPMN Analysis**: Understanding process flows, identifying bottlenecks, optimization opportunities
-3. **SAP Standards**: Knowledge of SAP HR best practices and standard workflows
+2. **BPMN Analysis**: Understanding process flows, identifying bottlenecks, optimization opportunities  
+3. **SAP SuccessFactors**: Deep knowledge of SAP HR best practices and standard workflows
 4. **Change Management**: Implementation strategies, training requirements, stakeholder communication
 5. **Compliance**: GDPR, labor laws, audit requirements, data security
 
-Your role is to provide intelligent, actionable insights about HRIS processes based on BPMN analysis. Always consider:
-- Business impact and ROI
-- Technical implementation requirements
-- User experience and adoption
-- Risk assessment and compliance
-- Process efficiency and automation opportunities
+🎯 **Your Role**: Provide intelligent, actionable insights about HRIS processes based on BPMN analysis.
 
-Provide specific, practical recommendations with clear next steps.${bpmnAnalysisContext}${knowledgeContext}`
+📋 **Always Consider:**
+- Business impact and ROI calculations
+- Technical implementation requirements and effort estimates
+- User experience and adoption strategies
+- Risk assessment and compliance requirements
+- Process efficiency and automation opportunities
+- Integration with existing SAP systems
+
+💡 **Response Style**: 
+- Be specific and practical with clear next steps
+- Reference the actual BPMN process data when available
+- Provide actionable recommendations with implementation guidance
+- Include potential risks and mitigation strategies
+
+${bpmnAnalysisContext}${knowledgeContext}`
       },
       ...messages.map(msg => ({
         role: msg.role as 'user' | 'assistant' | 'system',
@@ -169,7 +202,12 @@ Provide specific, practical recommendations with clear next steps.${bpmnAnalysis
       }
     ];
 
-    console.log('Sending request to OpenAI with', conversationMessages.length, 'messages');
+    console.log('🤖 Prepared OpenAI request:', {
+      messageCount: conversationMessages.length,
+      systemPromptLength: conversationMessages[0].content.length,
+      hasBpmnContext: !!bpmnAnalysisContext,
+      hasKnowledgeContext: !!knowledgeContext
+    });
 
     // Call OpenAI API
     const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -194,10 +232,21 @@ Provide specific, practical recommendations with clear next steps.${bpmnAnalysis
     }
 
     const aiResponse = await openAIResponse.json();
-    console.log('OpenAI response received:', aiResponse.usage);
+    console.log('✅ OpenAI response received:', {
+      hasChoices: !!aiResponse.choices,
+      choicesLength: aiResponse.choices?.length || 0,
+      usage: aiResponse.usage
+    });
+
+    if (!aiResponse.choices || !aiResponse.choices[0] || !aiResponse.choices[0].message) {
+      console.error('❌ Invalid OpenAI response structure:', aiResponse);
+      throw new Error('Invalid response structure from OpenAI');
+    }
 
     const assistantMessage = aiResponse.choices[0].message.content;
     const usage = aiResponse.usage;
+
+    console.log('📝 Assistant message preview:', assistantMessage?.substring(0, 200) + '...');
 
     // Save assistant message
     await supabase
@@ -229,11 +278,19 @@ Provide specific, practical recommendations with clear next steps.${bpmnAnalysis
     // Extract insights for knowledge base (async)
     extractKnowledgeForLearning(supabase, currentSessionId, bpmnFileId, assistantMessage, bpmnContext);
 
-    return new Response(JSON.stringify({
+    const responseData = {
       sessionId: currentSessionId,
       response: assistantMessage,
       usage: usage
-    }), {
+    };
+
+    console.log('🎉 Sending successful response:', {
+      sessionId: currentSessionId,
+      responseLength: assistantMessage?.length || 0,
+      tokens: usage?.total_tokens || 0
+    });
+
+    return new Response(JSON.stringify(responseData), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
