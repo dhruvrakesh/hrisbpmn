@@ -791,20 +791,33 @@ serve(async (req) => {
     // Store analysis results in database for persistence
     const { error: insertError } = await supabase
       .from('bpmn_analysis_results')
-      .upsert({
+      .insert({
         file_id: fileId,
         analysis_data: analysisResult,
         summary: analysisResult.summary,
         findings: analysisResult.findings,
-        ai_insights: analysisResult.processIntelligence,
-        updated_at: new Date().toISOString()
-      }, {
-        onConflict: 'file_id'
+        ai_insights: analysisResult.processIntelligence
       });
 
     if (insertError) {
       console.error('Failed to store analysis results:', insertError);
-      // Still return the analysis results even if storage fails
+      // Try to update existing record instead
+      const { error: updateError } = await supabase
+        .from('bpmn_analysis_results')
+        .update({
+          analysis_data: analysisResult,
+          summary: analysisResult.summary,
+          findings: analysisResult.findings,
+          ai_insights: analysisResult.processIntelligence,
+          updated_at: new Date().toISOString()
+        })
+        .eq('file_id', fileId);
+      
+      if (updateError) {
+        console.error('Failed to update analysis results:', updateError);
+      } else {
+        console.log('✅ Analysis results updated successfully in database');
+      }
     } else {
       console.log('✅ Analysis results stored successfully in database');
     }
