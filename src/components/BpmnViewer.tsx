@@ -5,7 +5,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { ZoomIn, ZoomOut, RotateCcw, Play, Save, Undo, Redo, FolderOpen, Download, Zap, Edit3, Info } from 'lucide-react';
+import { ZoomIn, ZoomOut, RotateCcw, Play, Save, Undo, Redo, FolderOpen, Download, Zap, Edit3, Info, Hash, FileSpreadsheet } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import BizagiIntegration from './BizagiIntegration';
 
@@ -17,6 +18,7 @@ interface BpmnViewerProps {
   onSave?: () => void;
   suggestions?: AIEditingSuggestion[];
   onSuggestionApplied?: (suggestion: AIEditingSuggestion) => void;
+  analysisResult?: any;
 }
 
 interface AIEditingSuggestion {
@@ -27,7 +29,7 @@ interface AIEditingSuggestion {
   details: any;
 }
 
-const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave, suggestions = [], onSuggestionApplied }: BpmnViewerProps) => {
+const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave, suggestions = [], onSuggestionApplied, analysisResult: externalAnalysisResult }: BpmnViewerProps) => {
   const viewerRef = useRef<HTMLDivElement>(null);
   const bpmnModelerRef = useRef<any>(null);
   const [loading, setLoading] = useState(true);
@@ -36,7 +38,16 @@ const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave, suggestions
   const [appliedSuggestions, setAppliedSuggestions] = useState<Set<string>>(new Set());
   const [cooldownUntil, setCooldownUntil] = useState(0);
   const [isOperationInProgress, setIsOperationInProgress] = useState(false);
+  const [showNumbers, setShowNumbers] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<any>(externalAnalysisResult || null);
   const { toast } = useToast();
+
+  // Update internal analysis result when external one changes
+  useEffect(() => {
+    if (externalAnalysisResult) {
+      setAnalysisResult(externalAnalysisResult);
+    }
+  }, [externalAnalysisResult]);
 
   const getCurrentBpmnXml = async (): Promise<string> => {
     if (!bpmnModelerRef.current) return '';
@@ -45,6 +56,124 @@ const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave, suggestions
       return result.xml;
     } catch {
       return '';
+    }
+  };
+
+  const fetchAnalysisResult = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('bpmn_analysis_results')
+        .select('analysis_data')
+        .eq('file_id', fileId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+      
+      if (data && !error) {
+        setAnalysisResult(data.analysis_data);
+      }
+    } catch (error) {
+      console.log('No analysis result found for this file');
+    }
+  };
+
+  const toggleElementNumbers = () => {
+    if (!bpmnModelerRef.current || !analysisResult?.exportData?.numberedElements) return;
+    
+    const canvas = bpmnModelerRef.current.get('canvas');
+    const elementRegistry = bpmnModelerRef.current.get('elementRegistry');
+    
+    if (showNumbers) {
+      // Remove existing number overlays
+      const overlays = bpmnModelerRef.current.get('overlays');
+      analysisResult.exportData.numberedElements.forEach((element: any) => {
+        overlays.remove({ element: element.elementId });
+      });
+      setShowNumbers(false);
+    } else {
+      // Add number overlays
+      const overlays = bpmnModelerRef.current.get('overlays');
+      analysisResult.exportData.numberedElements.forEach((element: any) => {
+        const targetElement = elementRegistry.get(element.elementId);
+        if (targetElement) {
+          overlays.add(element.elementId, {
+            position: { top: -10, left: -10 },
+            html: `<div style="background: #3b82f6; color: white; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">${element.stepNumber}</div>`
+          });
+        }
+      });
+      setShowNumbers(true);
+    }
+  };
+
+  const exportBpmnToExcel = () => {
+    if (!analysisResult?.exportData?.numberedElements) {
+      toast({
+        title: "No Analysis Data",
+        description: "Please run analysis first to generate numbered elements for export.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const workbook = XLSX.utils.book_new();
+      
+      // Create numbered elements sheet
+      const elementsData = [
+        ['Step Number', 'Step Detail', 'Swim Lane', 'Element Type', 'Element ID'],
+        ...analysisResult.exportData.numberedElements.map((element: any) => [
+          element.stepNumber,
+          element.stepDetail,
+          element.swimLane || 'Unassigned',
+          element.elementType,
+          element.elementId
+        ])
+      ];
+
+      const elementsSheet = XLSX.utils.aoa_to_sheet(elementsData);
+      
+      // Auto-size columns
+      const colWidths = [
+        { width: 12 }, // Step Number
+        { width: 40 }, // Step Detail
+        { width: 20 }, // Swim Lane
+        { width: 15 }, // Element Type
+        { width: 20 }  // Element ID
+      ];
+      elementsSheet['!cols'] = colWidths;
+      
+      XLSX.utils.book_append_sheet(workbook, elementsSheet, 'Process Steps');
+
+      // Create swim lane summary sheet if available
+      if (analysisResult.exportData.swimLaneMapping) {
+        const swimLaneData = [
+          ['Swim Lane', 'Element Count', 'Element IDs'],
+          ...Object.entries(analysisResult.exportData.swimLaneMapping).map(([lane, elements]: [string, any]) => [
+            lane,
+            Array.isArray(elements) ? elements.length : 0,
+            Array.isArray(elements) ? elements.join(', ') : ''
+          ])
+        ];
+
+        const swimLaneSheet = XLSX.utils.aoa_to_sheet(swimLaneData);
+        swimLaneSheet['!cols'] = [{ width: 20 }, { width: 15 }, { width: 50 }];
+        XLSX.utils.book_append_sheet(workbook, swimLaneSheet, 'Swim Lanes');
+      }
+
+      XLSX.writeFile(workbook, `${fileName}_numbered_process.xlsx`);
+      
+      toast({
+        title: "Export Successful",
+        description: "BPMN process exported to Excel with numbered elements and swim lanes.",
+      });
+    } catch (error) {
+      console.error('Export error:', error);
+      toast({
+        title: "Export Failed",
+        description: "Failed to export BPMN process to Excel.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -107,6 +236,9 @@ const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave, suggestions
       canvas.zoom('fit-viewport');
       
       setHasChanges(false);
+      
+      // Fetch analysis result if available
+      fetchAnalysisResult();
 
       toast({
         title: "BPMN Loaded",
@@ -815,15 +947,45 @@ const BpmnViewer = ({ fileId, fileName, filePath, onAnalyze, onSave, suggestions
                   <TooltipContent>Zoom Out</TooltipContent>
                 </Tooltip>
                 
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="outline" size="sm" onClick={handleResetZoom}>
-                      <RotateCcw className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Fit to View</TooltipContent>
-                </Tooltip>
-              </div>
+                 <Tooltip>
+                   <TooltipTrigger asChild>
+                     <Button variant="outline" size="sm" onClick={handleResetZoom}>
+                       <RotateCcw className="h-4 w-4" />
+                     </Button>
+                   </TooltipTrigger>
+                   <TooltipContent>Fit to View</TooltipContent>
+                 </Tooltip>
+                 
+                 <Tooltip>
+                   <TooltipTrigger asChild>
+                     <Button 
+                       variant={showNumbers ? "default" : "outline"} 
+                       size="sm" 
+                       onClick={toggleElementNumbers}
+                       disabled={!analysisResult?.exportData?.numberedElements}
+                     >
+                       <Hash className="h-4 w-4" />
+                     </Button>
+                   </TooltipTrigger>
+                   <TooltipContent>
+                     {showNumbers ? 'Hide Element Numbers' : 'Show Element Numbers'}
+                   </TooltipContent>
+                 </Tooltip>
+                 
+                 <Tooltip>
+                   <TooltipTrigger asChild>
+                     <Button 
+                       variant="outline" 
+                       size="sm" 
+                       onClick={exportBpmnToExcel}
+                       disabled={!analysisResult?.exportData?.numberedElements}
+                     >
+                       <FileSpreadsheet className="h-4 w-4" />
+                     </Button>
+                   </TooltipTrigger>
+                   <TooltipContent>Export Numbered Process to Excel</TooltipContent>
+                 </Tooltip>
+               </div>
               
               {/* Bizagi Integration */}
               <div className="border-l pl-2 ml-2">

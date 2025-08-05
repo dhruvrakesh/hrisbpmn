@@ -410,6 +410,7 @@ const Index = () => {
                     onAnalyze={runAnalysis}
                     suggestions={analysisResult?.processIntelligence?.editingSuggestions || []}
                     onSuggestionApplied={handleSuggestionApplied}
+                    analysisResult={analysisResult}
                   />
                 )}
               </div>

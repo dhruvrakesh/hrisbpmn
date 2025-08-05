@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { useExport } from '@/hooks/useExport';
 import { useToast } from '@/hooks/use-toast';
+import * as XLSX from 'xlsx';
 import { 
   AlertCircle, 
   AlertTriangle, 
@@ -173,6 +174,78 @@ const AnalysisResults = ({ result, loading, onRefresh, onApplySuggestion }: Anal
     }
   };
 
+  const handleExportBpmnExcel = () => {
+    if (!result || !(result as any)?.exportData?.numberedElements) {
+      toast({
+        title: "No Process Data",
+        description: "No numbered elements available for export. Please run analysis first.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const workbook = XLSX.utils.book_new();
+      const exportData = (result as any).exportData;
+      
+      // Create numbered elements sheet
+      const elementsData = [
+        ['Step Number', 'Step Detail', 'Swim Lane', 'Element Type', 'Element ID'],
+        ...exportData.numberedElements.map((element: any) => [
+          element.stepNumber,
+          element.stepDetail,
+          element.swimLane || 'Unassigned',
+          element.elementType,
+          element.elementId
+        ])
+      ];
+
+      const elementsSheet = XLSX.utils.aoa_to_sheet(elementsData);
+      
+      // Auto-size columns
+      const colWidths = [
+        { width: 12 }, // Step Number
+        { width: 40 }, // Step Detail
+        { width: 20 }, // Swim Lane
+        { width: 15 }, // Element Type
+        { width: 20 }  // Element ID
+      ];
+      elementsSheet['!cols'] = colWidths;
+      
+      XLSX.utils.book_append_sheet(workbook, elementsSheet, 'Process Steps');
+
+      // Create swim lane summary sheet if available
+      if (exportData.swimLaneMapping) {
+        const swimLaneData = [
+          ['Swim Lane', 'Element Count', 'Element IDs'],
+          ...Object.entries(exportData.swimLaneMapping).map(([lane, elements]: [string, any]) => [
+            lane,
+            Array.isArray(elements) ? elements.length : 0,
+            Array.isArray(elements) ? elements.join(', ') : ''
+          ])
+        ];
+
+        const swimLaneSheet = XLSX.utils.aoa_to_sheet(swimLaneData);
+        swimLaneSheet['!cols'] = [{ width: 20 }, { width: 15 }, { width: 50 }];
+        XLSX.utils.book_append_sheet(workbook, swimLaneSheet, 'Swim Lanes');
+      }
+
+      XLSX.writeFile(workbook, `${result.fileName}_process_map.xlsx`);
+      
+      toast({
+        title: "Export Successful",
+        description: "BPMN process map exported to Excel with numbered elements.",
+      });
+    } catch (error) {
+      console.error('Export error:', error);
+      toast({
+        title: "Export Failed",
+        description: "Failed to export process map to Excel.",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (loading) {
     return (
       <Card>
@@ -240,6 +313,12 @@ const AnalysisResults = ({ result, loading, onRefresh, onApplySuggestion }: Anal
               <FileSpreadsheet className="h-4 w-4 mr-2" />
               Export Excel
             </Button>
+            {(result as any)?.exportData?.numberedElements && (
+              <Button variant="outline" size="sm" onClick={handleExportBpmnExcel}>
+                <FileSpreadsheet className="h-4 w-4 mr-2" />
+                Export Process Map
+              </Button>
+            )}
             {onRefresh && (
               <Button variant="outline" size="sm" onClick={onRefresh}>
                 <RefreshCw className="h-4 w-4 mr-2" />
