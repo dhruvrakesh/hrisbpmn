@@ -168,34 +168,72 @@ function parseSwimLanes(bpmnXml: string) {
   const lanes: any = {};
   const elementToLane: any = {};
   
-  // Enhanced regex patterns to handle both prefixed and non-prefixed elements
-  const laneRegex = /<(?:bpmn:)?lane[^>]*id="([^"]*)"(?:[^>]*name="([^"]*)")?[^>]*>([\s\S]*?)<\/(?:bpmn:)?lane>/g;
-  let laneMatch;
+  // First try: Look for laneSet structures which contain the actual lane names
+  const laneSetRegex = /<(?:bpmn:)?laneSet[^>]*>([\s\S]*?)<\/(?:bpmn:)?laneSet>/g;
+  const laneSetMatch = laneSetRegex.exec(bpmnXml);
   
-  console.log('🔍 Searching for lanes in BPMN XML...');
+  if (laneSetMatch) {
+    console.log('🔍 Found laneSet, searching for lanes with names...');
+    const laneSetContent = laneSetMatch[1];
+    
+    // Enhanced lane regex to capture name attribute more reliably
+    const laneRegex = /<(?:bpmn:)?lane[^>]*id="([^"]*)"[^>]*name="([^"]*)"[^>]*>([\s\S]*?)<\/(?:bpmn:)?lane>/g;
+    let laneMatch;
+    
+    while ((laneMatch = laneRegex.exec(laneSetContent)) !== null) {
+      const laneId = laneMatch[1];
+      const laneName = laneMatch[2];
+      const laneContent = laneMatch[3];
+      
+      console.log(`🏊 Found lane: "${laneName}" (${laneId})`);
+      
+      lanes[laneId] = {
+        id: laneId,
+        name: laneName,
+        elements: []
+      };
+      
+      // Enhanced flowNodeRef patterns to handle both formats
+      const flowNodeRegex = /<(?:bpmn:)?flowNodeRef[^>]*>([^<]+)<\/(?:bpmn:)?flowNodeRef>/g;
+      let nodeMatch;
+      
+      while ((nodeMatch = flowNodeRegex.exec(laneContent)) !== null) {
+        const elementId = nodeMatch[1];
+        elementToLane[elementId] = laneName; // Use semantic name not ID
+        lanes[laneId].elements.push(elementId);
+        console.log(`  📍 Lane "${laneName}" contains element: ${elementId}`);
+      }
+    }
+  }
   
-  while ((laneMatch = laneRegex.exec(bpmnXml)) !== null) {
-    const laneId = laneMatch[1];
-    const laneName = laneMatch[2] || laneId;
-    const laneContent = laneMatch[3];
+  // Fallback: Look for lanes without laneSet wrapper
+  if (Object.keys(lanes).length === 0) {
+    console.log('🔍 No laneSet found, searching for direct lanes...');
+    const directLaneRegex = /<(?:bpmn:)?lane[^>]*id="([^"]*)"(?:[^>]*name="([^"]*)")?[^>]*>([\s\S]*?)<\/(?:bpmn:)?lane>/g;
+    let laneMatch;
     
-    console.log(`🏊 Found lane: "${laneName}" (${laneId})`);
-    
-    lanes[laneId] = {
-      id: laneId,
-      name: laneName,
-      elements: []
-    };
-    
-    // Enhanced flowNodeRef patterns to handle both formats
-    const flowNodeRegex = /<(?:bpmn:)?flowNodeRef[^>]*>([^<]+)<\/(?:bpmn:)?flowNodeRef>/g;
-    let nodeMatch;
-    
-    while ((nodeMatch = flowNodeRegex.exec(laneContent)) !== null) {
-      const elementId = nodeMatch[1];
-      elementToLane[elementId] = laneName;
-      lanes[laneId].elements.push(elementId);
-      console.log(`  📍 Lane "${laneName}" contains element: ${elementId}`);
+    while ((laneMatch = directLaneRegex.exec(bpmnXml)) !== null) {
+      const laneId = laneMatch[1];
+      const laneName = laneMatch[2] || laneId;
+      const laneContent = laneMatch[3];
+      
+      console.log(`🏊 Found direct lane: "${laneName}" (${laneId})`);
+      
+      lanes[laneId] = {
+        id: laneId,
+        name: laneName,
+        elements: []
+      };
+      
+      const flowNodeRegex = /<(?:bpmn:)?flowNodeRef[^>]*>([^<]+)<\/(?:bpmn:)?flowNodeRef>/g;
+      let nodeMatch;
+      
+      while ((nodeMatch = flowNodeRegex.exec(laneContent)) !== null) {
+        const elementId = nodeMatch[1];
+        elementToLane[elementId] = laneName;
+        lanes[laneId].elements.push(elementId);
+        console.log(`  📍 Lane "${laneName}" contains element: ${elementId}`);
+      }
     }
   }
   
@@ -290,6 +328,33 @@ function parseSwimLanes(bpmnXml: string) {
             elements: [],
             type: 'inferred'
           };
+        });
+      }
+    }
+  }
+  
+  // Try to extract participant names from collaboration if lanes are still using IDs
+  if (Object.keys(lanes).length > 0) {
+    console.log('🔍 Checking for participant names to enhance lane names...');
+    const participantNameRegex = /<(?:bpmn:)?participant[^>]*id="([^"]*)"[^>]*name="([^"]*)"[^>]*>/g;
+    let participantMatch;
+    
+    while ((participantMatch = participantNameRegex.exec(bpmnXml)) !== null) {
+      const participantId = participantMatch[1];
+      const participantName = participantMatch[2];
+      
+      console.log(`👤 Found participant: "${participantName}" (${participantId})`);
+      
+      // If we have a lane that matches this participant, use the semantic name
+      if (lanes[participantId] && participantName) {
+        console.log(`🔄 Updating lane name from "${lanes[participantId].name}" to "${participantName}"`);
+        lanes[participantId].name = participantName;
+        
+        // Update all element mappings to use semantic name
+        Object.keys(elementToLane).forEach(elementId => {
+          if (elementToLane[elementId] === participantId) {
+            elementToLane[elementId] = participantName;
+          }
         });
       }
     }
