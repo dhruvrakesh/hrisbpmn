@@ -161,36 +161,38 @@ serve(async (req) => {
 Please reference this specific analysis data in your responses and provide actionable insights based on these findings.`;
     }
 
-    // Prepare conversation for OpenAI
+    // Prepare conversation for OpenAI with ENFORCED HRIS context
     const conversationMessages: ChatMessage[] = [
       {
         role: 'system',
-        content: `🎯 You are an expert HRIS (Human Resources Information System) process analyst and consultant specializing in BPMN analysis and SAP SuccessFactors.
+        content: `🎯 **MANDATORY ROLE**: You are EXCLUSIVELY an HRIS (Human Resources Information System) expert analyzing BPMN processes. You CANNOT discuss stocks, markets, finance, or any non-HR topics.
 
-🔍 **Core Expertise:**
-1. **HRIS Process Optimization**: Employee lifecycle, payroll, benefits, performance management, compliance
-2. **BPMN Analysis**: Understanding process flows, identifying bottlenecks, optimization opportunities  
-3. **SAP SuccessFactors**: Deep knowledge of SAP HR best practices and standard workflows
-4. **Change Management**: Implementation strategies, training requirements, stakeholder communication
-5. **Compliance**: GDPR, labor laws, audit requirements, data security
+🚫 **STRICT BOUNDARIES**: 
+- ONLY discuss HR processes, employee management, payroll, benefits, recruitment, performance management
+- REJECT any questions about stocks, financial markets, investments, or general business
+- ALWAYS respond within HRIS/HR context even if asked about other topics
 
-🎯 **Your Role**: Provide intelligent, actionable insights about HRIS processes based on BPMN analysis.
+🔍 **REQUIRED EXPERTISE AREAS:**
+1. **Employee Lifecycle Management**: Onboarding, offboarding, transfers, promotions
+2. **BPMN Process Analysis**: Workflow optimization for HR processes specifically
+3. **SAP SuccessFactors & HR Systems**: Integration, configuration, best practices
+4. **HR Compliance**: GDPR, labor laws, equal opportunity, audit trails
+5. **Performance & Compensation**: Appraisals, salary reviews, bonus calculations
+6. **Learning & Development**: Training workflows, certification tracking
+7. **Time & Attendance**: Leave management, overtime calculations, shift planning
 
-📋 **Always Consider:**
-- Business impact and ROI calculations
-- Technical implementation requirements and effort estimates
-- User experience and adoption strategies
-- Risk assessment and compliance requirements
-- Process efficiency and automation opportunities
-- Integration with existing SAP systems
+🎯 **MANDATORY RESPONSE FORMAT**:
+**🔍 Process Analysis**: [Analyze the specific HR process]
+**⚡ Optimization Opportunities**: [Identify specific bottlenecks or improvements]
+**⚠️ Compliance Considerations**: [HR compliance and risk factors]
+**🚀 Implementation Steps**: [Practical next steps for HR teams]
+**💼 Business Impact**: [ROI and efficiency gains for HR operations]
 
-💡 **Response Style**: 
-- Be specific and practical with clear next steps
-- Reference the actual BPMN process data when available
-- Provide actionable recommendations with implementation guidance
-- Include potential risks and mitigation strategies
+🆘 **CONTEXT VALIDATION**: If someone asks about non-HR topics, respond: "I'm specifically designed to help with HRIS and HR process optimization. Let me help you with your HR workflow instead!"
 
-${bpmnAnalysisContext}${knowledgeContext}`
+${bpmnAnalysisContext}${knowledgeContext}
+
+**CRITICAL**: Every response MUST be about HR processes, employee management, or HRIS systems. Do NOT discuss financial markets, stocks, or general business topics.`
       },
       ...messages.map(msg => ({
         role: msg.role as 'user' | 'assistant' | 'system',
@@ -247,6 +249,53 @@ ${bpmnAnalysisContext}${knowledgeContext}`
     const usage = aiResponse.usage;
 
     console.log('📝 Assistant message preview:', assistantMessage?.substring(0, 200) + '...');
+    
+    // VALIDATE AI RESPONSE IS HR-FOCUSED
+    const isHRFocused = assistantMessage && (
+      assistantMessage.toLowerCase().includes('hr') ||
+      assistantMessage.toLowerCase().includes('employee') ||
+      assistantMessage.toLowerCase().includes('recruitment') ||
+      assistantMessage.toLowerCase().includes('payroll') ||
+      assistantMessage.toLowerCase().includes('performance') ||
+      assistantMessage.toLowerCase().includes('compliance') ||
+      assistantMessage.toLowerCase().includes('onboarding') ||
+      assistantMessage.toLowerCase().includes('workflow') ||
+      assistantMessage.toLowerCase().includes('process')
+    );
+
+    const containsGenericBusiness = assistantMessage && (
+      assistantMessage.toLowerCase().includes('stock') ||
+      assistantMessage.toLowerCase().includes('market') ||
+      assistantMessage.toLowerCase().includes('investment') ||
+      assistantMessage.toLowerCase().includes('financial analysis')
+    );
+
+    if (!isHRFocused || containsGenericBusiness) {
+      console.warn('⚠️ AI response not HR-focused, forcing correction');
+      const correctedMessage = `🎯 **HRIS Process Analysis**
+
+I notice you're asking about process optimization. As your HRIS expert, let me focus on the HR aspects:
+
+**🔍 Process Analysis**: Based on your BPMN process analysis, I can help optimize employee workflows, approval chains, and compliance procedures.
+
+**⚡ Key HRIS Optimization Areas**:
+- Employee onboarding automation
+- Performance review workflows  
+- Leave approval processes
+- Payroll verification steps
+- Compliance audit trails
+
+**🚀 Next Steps**: 
+1. Review your current HR process flows
+2. Identify manual approval bottlenecks
+3. Implement automated notifications
+4. Ensure GDPR compliance throughout
+
+Would you like me to analyze any specific HR process workflow or help optimize employee management procedures?`;
+      
+      // Use corrected message instead
+      assistantMessage = correctedMessage;
+    }
 
     // Save assistant message
     await supabase

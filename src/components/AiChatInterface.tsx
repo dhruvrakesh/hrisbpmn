@@ -102,6 +102,23 @@ const AiChatInterface = ({ bpmnFileId, bpmnContext, analysisResult }: AiChatInte
         throw new Error('Invalid response format from AI service');
       }
 
+      // VALIDATE AI RESPONSE CONTENT
+      if (typeof data.response !== 'string' || data.response.trim().length === 0) {
+        console.error('❌ AI response is empty or invalid type:', typeof data.response);
+        throw new Error('AI response is empty or invalid');
+      }
+
+      // Check if response seems to be about HR/HRIS
+      const isHRResponse = data.response.toLowerCase().includes('hr') || 
+                          data.response.toLowerCase().includes('employee') ||
+                          data.response.toLowerCase().includes('process') ||
+                          data.response.toLowerCase().includes('workflow');
+      
+      if (!isHRResponse) {
+        console.warn('⚠️ AI response does not seem HR-focused:', data.response.substring(0, 100));
+        // Continue anyway but log the warning
+      }
+
       // Update session ID if new
       if (data.sessionId && !sessionId) {
         setSessionId(data.sessionId);
